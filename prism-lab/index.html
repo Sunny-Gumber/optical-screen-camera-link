@@ -3,48 +3,82 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#08111f" />
-  <title>Prism Lab — Optics Puzzle V1</title>
+  <meta name="theme-color" content="#050b14" />
+  <title>Prism Lab V2 — Real Optics Puzzle</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">INTERACTIVE OPTICS</p>
-        <h1>Prism Lab</h1>
-        <p class="subtitle">Guide the beam to the target by positioning and rotating mirrors.</p>
+        <p class="eyebrow">REAL-TIME OPTICS PUZZLE</p>
+        <h1>Prism Lab <span>V2</span></h1>
+        <p class="subtitle">Reflect, refract, focus, split and filter light using interactive optical components.</p>
       </div>
       <div class="level-chip" aria-live="polite">
         <span id="levelLabel">Level 1</span>
-        <strong id="levelTitle">First Reflection</strong>
+        <strong id="levelTitle">Reflection 101</strong>
       </div>
     </header>
 
     <section class="game-card">
-      <div class="canvas-wrap" id="canvasWrap">
-        <canvas id="gameCanvas" width="1200" height="700" aria-label="Optics puzzle board"></canvas>
-        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <div class="stage-column">
+        <div class="objective-bar">
+          <div>
+            <span class="objective-kicker">OBJECTIVE</span>
+            <strong id="objectiveText">Guide the beam to the target.</strong>
+          </div>
+          <div class="score-pack">
+            <span>Moves <b id="moveCount">0</b></span>
+            <span>Par <b id="parCount">3</b></span>
+            <span id="starPreview" class="stars">★★★</span>
+          </div>
+        </div>
+
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="gameCanvas" width="1200" height="700" aria-label="Interactive optics puzzle board"></canvas>
+          <div id="toast" class="toast" role="status" aria-live="polite"></div>
+          <div id="componentBadge" class="component-badge">Mirror</div>
+        </div>
+
+        <div id="sandboxTray" class="sandbox-tray" hidden>
+          <span>Add component</span>
+          <button type="button" data-add="mirror">Mirror</button>
+          <button type="button" data-add="prism">Prism</button>
+          <button type="button" data-add="lens">Lens</button>
+          <button type="button" data-add="splitter">Beam splitter</button>
+          <button type="button" data-add="filter-red">Red filter</button>
+          <button type="button" data-add="filter-green">Green filter</button>
+          <button type="button" data-add="filter-blue">Blue filter</button>
+          <button type="button" data-add="blocker">Blocker</button>
+        </div>
       </div>
 
       <aside class="panel">
         <section class="panel-block">
-          <h2>How to play</h2>
-          <p>Drag a mirror to move it. Tap a mirror to select it, then rotate it until the beam reaches the green target.</p>
-        </section>
-
-        <section class="panel-block selected-card">
           <div class="row between">
-            <h2>Selected mirror</h2>
+            <h2>Selected component</h2>
             <span id="selectedName" class="status-pill">Mirror 1</span>
           </div>
+          <p id="selectedDescription">Reflects light with angle of incidence equal to angle of reflection.</p>
           <div class="angle-readout"><span id="angleValue">0</span>°</div>
           <div class="control-grid">
-            <button id="rotateLeft" type="button">↶ Rotate</button>
-            <button id="rotateRight" type="button">Rotate ↷</button>
+            <button id="rotateLeft" type="button">↶ 5°</button>
+            <button id="rotateRight" type="button">5° ↷</button>
           </div>
           <label class="range-label" for="angleSlider">Fine rotation</label>
           <input id="angleSlider" type="range" min="0" max="179" step="1" value="0" />
+          <button id="deleteComponent" type="button" class="danger compact" hidden>Delete component</button>
+        </section>
+
+        <section class="panel-block metrics">
+          <div class="row between"><h2>Live physics</h2><span id="physicsModeLabel">Visual</span></div>
+          <div class="metric-grid">
+            <div><span>Rays</span><strong id="rayCount">1</strong></div>
+            <div><span>Interactions</span><strong id="interactionCount">0</strong></div>
+            <div><span>Targets</span><strong id="targetCount">0/1</strong></div>
+            <div><span>Medium</span><strong id="mediumLabel">Air</strong></div>
+          </div>
         </section>
 
         <section class="panel-block">
@@ -52,7 +86,16 @@
             <input id="physicsToggle" type="checkbox" />
             <span>Physics view</span>
           </label>
-          <p class="small">Shows mirror normals, hit points and reflection angles.</p>
+          <p class="small">Shows normals, optical axes, focal points and calculated interaction data.</p>
+        </section>
+
+        <section class="panel-block spectrum-panel">
+          <h2>Active spectrum</h2>
+          <div id="spectrumReadout" class="spectrum-readout">
+            <span class="spec red">R 650 nm</span>
+            <span class="spec green">G 540 nm</span>
+            <span class="spec blue">B 460 nm</span>
+          </div>
         </section>
 
         <section class="panel-block actions">
@@ -61,18 +104,23 @@
           <button id="nextLevel" type="button">Next →</button>
         </section>
 
-        <section class="panel-block legend">
-          <h2>Legend</h2>
-          <div><span class="dot source"></span> Light source</div>
-          <div><span class="line mirror"></span> Mirror</div>
-          <div><span class="dot target"></span> Target</div>
+        <section class="panel-block component-key">
+          <h2>Optical components</h2>
+          <div class="key-grid">
+            <span><i class="key mirror"></i>Mirror</span>
+            <span><i class="key prism"></i>Prism</span>
+            <span><i class="key lens"></i>Lens</span>
+            <span><i class="key splitter"></i>Splitter</span>
+            <span><i class="key filter"></i>Filter</span>
+            <span><i class="key blocker"></i>Blocker</span>
+          </div>
         </section>
       </aside>
     </section>
 
     <footer>
-      <span>V1 • Runs fully in your browser • No server required</span>
-      <span id="progressText">0 / 4 levels solved</span>
+      <span>V2 • Snell refraction • wavelength dispersion • thin-lens model • beam splitting</span>
+      <span id="progressText">0 / 7 campaign levels solved</span>
     </footer>
   </main>
 
