@@ -28,7 +28,7 @@
 <body>
 <main>
   <h1>Optical Sender</h1>
-  <p class="sub">V1 reliable colour mode + experimental V2 shape × colour mode</p>
+  <p class="sub">Reliable baseline + hybrid shape/colour modes with live calibration and retransmission diversity</p>
 
   <section class="panel">
     <label for="message"><strong>Data to transmit</strong></label>
@@ -38,7 +38,8 @@
       <label for="profile"><strong>Optical mode:</strong></label>
       <select id="profile">
         <option value="v1">V1 Reliable · C16 × R3 · 13-byte payload</option>
-        <option value="v2" selected>V2 Test · 8 shapes × 32 colours × R3 · 37-byte payload</option>
+        <option value="v21" selected>V2.1 Robust · 8 shapes × 16 colours × R3 · 34-byte payload</option>
+        <option value="v2">V2 Fast Test · 8 shapes × 32 colours × R3 · 37-byte payload</option>
       </select>
     </div>
 
@@ -56,7 +57,7 @@
       <a href="../receiver-web/">Open Receiver</a>
     </div>
     <div id="stats" class="stats" aria-live="polite"></div>
-    <p class="hint"><strong>V2 first test:</strong> use 1 fps and fullscreen. Every data cell carries a 3-bit glyph plus a 5-bit colour. Three spatial copies are sent and the receiver votes shape and colour independently.</p>
+    <p class="hint"><strong>Recommended now:</strong> V2.1 Robust at 1 fps. It keeps 8 shapes but uses the 16-colour palette already proven on the physical link. Each retransmission also changes the physical shape/colour mapping while the live calibration lets the receiver decode the same logical packet.</p>
   </section>
 
   <section class="panel">
