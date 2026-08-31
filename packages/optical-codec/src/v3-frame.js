@@ -52,13 +52,9 @@ export function bytesToNibbles(bytes) {
 
 export function nibblesToBytes(nibbles, byteCount = Math.floor(nibbles.length / 2)) {
   if (!(nibbles instanceof Uint8Array)) throw new TypeError('nibblesToBytes expects Uint8Array');
-  if (!Number.isInteger(byteCount) || byteCount < 0 || byteCount * 2 > nibbles.length) {
-    throw new RangeError('Invalid V3 byte count');
-  }
+  if (!Number.isInteger(byteCount) || byteCount < 0 || byteCount * 2 > nibbles.length) throw new RangeError('Invalid V3 byte count');
   const bytes = new Uint8Array(byteCount);
-  for (let i = 0; i < byteCount; i += 1) {
-    bytes[i] = ((nibbles[i * 2] & 0x0F) << 4) | (nibbles[(i * 2) + 1] & 0x0F);
-  }
+  for (let i = 0; i < byteCount; i += 1) bytes[i] = ((nibbles[i * 2] & 0x0F) << 4) | (nibbles[(i * 2) + 1] & 0x0F);
   return bytes;
 }
 
@@ -90,32 +86,64 @@ export function deinterleaveV3(symbols, profile = V3_G64_S4_C4_RS) {
   return codewords;
 }
 
-export function recoverV3PacketFromSymbols(symbols, profile = V3_G64_S4_C4_RS) {
+function deinterleaveConfidence(confidences, profile) {
+  if (!confidences || confidences.length !== profile.encodedSymbolCapacity) return null;
+  const codewords = Array.from({ length: profile.rsCodewordCount }, () => new Float32Array(RS16_N));
+  let index = 0;
+  for (let symbolPosition = 0; symbolPosition < RS16_N; symbolPosition += 1) {
+    for (let block = 0; block < codewords.length; block += 1) codewords[block][symbolPosition] = confidences[index++];
+  }
+  return codewords;
+}
+
+function chooseErasures(confidenceWord) {
+  if (!confidenceWord) return [];
+  const ranked = Array.from(confidenceWord, (confidence, position) => ({ confidence, position }))
+    .sort((a, b) => a.confidence - b.confidence);
+
+  // Preserve room for one unknown RS error in ordinary frames: normally mark
+  // no more than two suspicious cells. Only extremely weak cells (<0.18) are
+  // allowed to consume all four parity symbols as explicit erasures.
+  const erasures = ranked.filter((entry) => entry.confidence < 0.18).slice(0, 4).map((entry) => entry.position);
+  if (erasures.length < 2) {
+    for (const entry of ranked) {
+      if (entry.confidence >= 0.34 || erasures.includes(entry.position)) continue;
+      erasures.push(entry.position);
+      if (erasures.length >= 2) break;
+    }
+  }
+  return erasures;
+}
+
+export function recoverV3PacketFromSymbols(symbols, profile = V3_G64_S4_C4_RS, confidences = null) {
   const codewords = deinterleaveV3(symbols, profile);
+  const confidenceWords = deinterleaveConfidence(confidences, profile);
   const recovered = [];
   let packetLength = null;
   let requiredNibbles = null;
   let correctedSymbols = 0;
+  let erasuresUsed = 0;
   let blocksDecoded = 0;
 
   for (let blockIndex = 0; blockIndex < codewords.length; blockIndex += 1) {
     let decoded;
+    const erasures = chooseErasures(confidenceWords?.[blockIndex]);
     try {
-      decoded = rs16Decode(codewords[blockIndex]);
+      decoded = rs16Decode(codewords[blockIndex], { erasures });
     } catch (error) {
       error.blockIndex = blockIndex;
+      error.erasurePositions = erasures;
       throw error;
     }
     correctedSymbols += decoded.correctedSymbols;
+    erasuresUsed += decoded.erasuresUsed ?? 0;
     blocksDecoded += 1;
     recovered.push(...decoded.data);
 
     if (packetLength === null && recovered.length >= 4) {
       const header = nibblesToBytes(Uint8Array.from(recovered.slice(0, 4)), 2);
       packetLength = new DataView(header.buffer).getUint16(0, false);
-      if (packetLength < 1 || packetLength > profile.maxPacketBytes) {
-        throw new Error(`Invalid V3 packet length ${packetLength}`);
-      }
+      if (packetLength < 1 || packetLength > profile.maxPacketBytes) throw new Error(`Invalid V3 packet length ${packetLength}`);
       requiredNibbles = (profile.lengthPrefixBytes + packetLength) * 2;
     }
     if (requiredNibbles !== null && recovered.length >= requiredNibbles) break;
@@ -126,6 +154,7 @@ export function recoverV3PacketFromSymbols(symbols, profile = V3_G64_S4_C4_RS) {
   return {
     packetBytes: envelope.slice(profile.lengthPrefixBytes),
     correctedSymbols,
+    erasuresUsed,
     blocksDecoded,
     packetLength,
   };
