@@ -40,21 +40,13 @@ function fillPadding(envelope, packetLength) {
 
 function repeatBytes(bytes, repetition) {
   const encoded = new Uint8Array(bytes.length * repetition);
-  for (let copy = 0; copy < repetition; copy += 1) {
-    encoded.set(bytes, copy * bytes.length);
-  }
+  for (let copy = 0; copy < repetition; copy += 1) encoded.set(bytes, copy * bytes.length);
   return encoded;
 }
 
 export function splitS8C8B4Byte(value) {
-  if (!Number.isInteger(value) || value < 0 || value > 255) {
-    throw new RangeError('S8C8B4 value must be one byte');
-  }
-  return {
-    shapeId: value >>> 5,
-    colorIndex: (value >>> 2) & 0x07,
-    backgroundIndex: value & 0x03,
-  };
+  if (!Number.isInteger(value) || value < 0 || value > 255) throw new RangeError('S8C8B4 value must be one byte');
+  return { shapeId: value >>> 5, colorIndex: (value >>> 2) & 0x07, backgroundIndex: value & 0x03 };
 }
 
 export function joinS8C8B4Byte(shapeId, colorIndex, backgroundIndex) {
@@ -87,7 +79,7 @@ export function encodeS8C8B4Frame(packetBytes, profile = V22_S8_C8_B4_R3) {
   for (let shapeId = 0; shapeId < profile.shapeCount; shapeId += 1) {
     const x = profile.shapeCalibrationStartX + shapeId;
     const y = profile.shapeCalibrationRow;
-    cells[y][x] = { x, y, kind: 'shape-calibration', shapeId };
+    cells[y][x] = { x, y, kind: 'shape-calibration-22', shapeId };
   }
 
   profile.profileSignatureBits.forEach((bit, index) => {
@@ -113,11 +105,7 @@ export function encodeS8C8B4Frame(packetBytes, profile = V22_S8_C8_B4_R3) {
     const value = repeated[index];
     const parts = splitS8C8B4Byte(value);
     cells[y][x] = {
-      x,
-      y,
-      kind: 's8c8b4-data',
-      value,
-      ...parts,
+      x, y, kind: 's8c8b4-data', value, ...parts,
       logicalByteIndex: index % profile.dataByteCapacity,
       copyIndex: Math.floor(index / profile.dataByteCapacity),
     };
@@ -152,9 +140,7 @@ export function decodeS8C8B4Frame(frame, profile = V22_S8_C8_B4_R3) {
 
   const envelope = new Uint8Array(profile.dataByteCapacity);
   for (let i = 0; i < envelope.length; i += 1) {
-    const copies = Array.from({ length: profile.repetition }, (_, copy) =>
-      physical[i + (copy * envelope.length)],
-    );
+    const copies = Array.from({ length: profile.repetition }, (_, copy) => physical[i + (copy * envelope.length)]);
     envelope[i] = joinS8C8B4Byte(
       majority(copies.map((cell) => cell.shapeId)),
       majority(copies.map((cell) => cell.colorIndex)),
@@ -164,8 +150,6 @@ export function decodeS8C8B4Frame(frame, profile = V22_S8_C8_B4_R3) {
 
   const view = new DataView(envelope.buffer, envelope.byteOffset, envelope.byteLength);
   const packetLength = view.getUint16(0, false);
-  if (packetLength < 1 || packetLength > profile.maxPacketBytes) {
-    throw new Error(`Decoded packet length ${packetLength} exceeds profile capacity`);
-  }
+  if (packetLength < 1 || packetLength > profile.maxPacketBytes) throw new Error(`Decoded packet length ${packetLength} exceeds profile capacity`);
   return envelope.slice(profile.lengthPrefixBytes, profile.lengthPrefixBytes + packetLength);
 }
