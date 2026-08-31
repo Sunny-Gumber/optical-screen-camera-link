@@ -2,11 +2,8 @@ import { decodePacket, FRAME_TYPE_NAMES, PacketError, TransferReassembler } from
 import { decodeRectifiedRoi } from './decoder.js';
 import { decodeS8C32Roi, detectV2Profile } from './v2-decoder.js';
 import { decodeS8C16Roi, detectV21Profile } from './v21-decoder.js';
-import {
-  describeCameraError,
-  listVideoInputs,
-  openCameraWithFallback,
-} from './camera.js';
+import { decodeS8C8B4Roi, detectV22Profile } from './v22-decoder.js';
+import { describeCameraError, listVideoInputs, openCameraWithFallback } from './camera.js';
 import {
   detectFrameFiducials,
   drawAutoFiducialOverlay,
@@ -69,8 +66,10 @@ function createMetrics() {
     lastProfile: '—',
     shapeCorrections: 0,
     colorCorrections: 0,
+    backgroundCorrections: 0,
     shapeUncorrectable: 0,
     colorUncorrectable: 0,
+    backgroundUncorrectable: 0,
     lastError: '',
   };
 }
@@ -95,11 +94,7 @@ function showCameraError(info = null) {
     return;
   }
   cameraError.hidden = false;
-  cameraError.innerHTML = `
-    <strong>${info.title}</strong>
-    <span>${info.detail}</span>
-    <code>${info.technical}</code>
-  `;
+  cameraError.innerHTML = `<strong>${info.title}</strong><span>${info.detail}</span><code>${info.technical}</code>`;
 }
 
 function packetKey(packet) {
@@ -130,15 +125,14 @@ function renderMetrics() {
     ['Avg confidence', `${(metrics.lastConfidence * 100).toFixed(1)}%`],
     ['Shape corrections', metrics.shapeCorrections],
     ['Colour corrections', metrics.colorCorrections],
+    ['Background corrections', metrics.backgroundCorrections],
     ['Shape uncertain', metrics.shapeUncorrectable],
     ['Colour uncertain', metrics.colorUncorrectable],
+    ['Background uncertain', metrics.backgroundUncorrectable],
     ['Rotation', `${metrics.lastRotation}°`],
     ['Useful rate', usefulBps ? `${usefulBps} bps` : '—'],
   ];
-
-  metricsHost.innerHTML = values
-    .map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`)
-    .join('');
+  metricsHost.innerHTML = values.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
 }
 
 function resetTransfer(reason = 'manual reset') {
@@ -186,7 +180,6 @@ function stabilizeDetection(previous, next, canvasWidth) {
     pendingDetectionCount = 0;
     return next;
   }
-
   const threshold = Math.max(28, canvasWidth * 0.065);
   const movement = averageCornerDistance(previous, next);
   if (movement <= threshold) {
@@ -194,7 +187,6 @@ function stabilizeDetection(previous, next, canvasWidth) {
     pendingDetectionCount = 0;
     return smoothCloseDetection(previous, next);
   }
-
   metrics.locatorJumpRejects += 1;
   if (pendingDetection && averageCornerDistance(pendingDetection, next) <= threshold) {
     pendingDetection = smoothCloseDetection(pendingDetection, next);
@@ -203,8 +195,6 @@ function stabilizeDetection(previous, next, canvasWidth) {
     pendingDetection = next;
     pendingDetectionCount = 1;
   }
-
-  // Real camera movement persists. A one-frame false locator does not.
   if (pendingDetectionCount >= 3) {
     const accepted = pendingDetection;
     pendingDetection = null;
@@ -253,14 +243,10 @@ async function startCamera() {
       throw error;
     }
     const selectedDeviceId = cameraSelect.value || '';
-    const opened = await openCameraWithFallback(
-      navigator.mediaDevices,
-      selectedDeviceId,
-      (label) => {
-        setPill(cameraState, `Trying ${label}…`, 'working');
-        log(`Trying camera mode: ${label}`);
-      },
-    );
+    const opened = await openCameraWithFallback(navigator.mediaDevices, selectedDeviceId, (label) => {
+      setPill(cameraState, `Trying ${label}…`, 'working');
+      log(`Trying camera mode: ${label}`);
+    });
     stream = opened.stream;
     video.srcObject = stream;
     await video.play();
@@ -273,7 +259,7 @@ async function startCamera() {
     setPill(cameraState, `${video.videoWidth}×${video.videoHeight} active`, 'good');
     setPill(lockState, 'Searching 4 locators', 'working');
     showCameraError(null);
-    log(`Camera started using ${opened.attempt}. Automatic V1/V2/V2.1 optical detection is active.`);
+    log(`Camera started using ${opened.attempt}. Automatic V1/V2/V2.1/V2.2 optical detection is active.`);
     scheduleLoop(0);
   } catch (error) {
     if (stream) {
@@ -369,6 +355,8 @@ function handleValidPacket(packetBytes, opticalResult) {
 }
 
 function decodeCurrentOpticalFrame() {
+  const threeChannelProbe = detectV22Profile(roiCanvas);
+  if (threeChannelProbe.isV22) return decodeS8C8B4Roi(roiCanvas);
   const robustProbe = detectV21Profile(roiCanvas);
   if (robustProbe.isV21) return decodeS8C16Roi(roiCanvas);
   const fastProbe = detectV2Profile(roiCanvas);
@@ -417,8 +405,10 @@ async function processFrame() {
       metrics.lastRotation = opticalResult.rotation;
       metrics.shapeCorrections = opticalResult.shapeCorrections ?? 0;
       metrics.colorCorrections = opticalResult.colorCorrections ?? 0;
+      metrics.backgroundCorrections = opticalResult.backgroundCorrections ?? 0;
       metrics.shapeUncorrectable = opticalResult.shapeUncorrectable ?? 0;
       metrics.colorUncorrectable = opticalResult.colorUncorrectable ?? 0;
+      metrics.backgroundUncorrectable = opticalResult.backgroundUncorrectable ?? 0;
       handleValidPacket(opticalResult.packetBytes, opticalResult);
       metrics.roiLocks += 1;
       decodedOk = true;
@@ -449,9 +439,7 @@ cameraSelect.addEventListener('change', () => {
     startCamera();
   }
 });
-toggleDebug.addEventListener('change', () => {
-  debugPanel.hidden = !toggleDebug.checked;
-});
+toggleDebug.addEventListener('change', () => { debugPanel.hidden = !toggleDebug.checked; });
 
 navigator.mediaDevices?.addEventListener?.('devicechange', () => refreshCameraList());
 window.addEventListener('beforeunload', stopCamera);
