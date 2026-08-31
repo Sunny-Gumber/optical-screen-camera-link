@@ -46,8 +46,7 @@ export const V2_S8_C32_R3 = Object.freeze({
 });
 
 // Reliability-first hybrid profile. 8 shapes provide 3 bits and 16 colours
-// provide 4 bits, so each logical symbol carries 7 bits. Only one colour
-// calibration row is required, allowing row 3 to become payload again.
+// provide 4 bits, so each logical symbol carries 7 bits.
 export const V21_S8_C16_R3 = Object.freeze({
   id: 'V2.1-S8-C16-R3',
   modulation: 'S8C16-R3',
@@ -74,6 +73,38 @@ export const V21_S8_C16_R3 = Object.freeze({
   lengthPrefixBytes: 2,
   maxPacketBytes: 48,
   recommendedProtocolPayloadBytes: 34,
+});
+
+// V2.2 splits one full byte across three independently calibrated optical
+// variables: shape=3 bits, foreground colour=3 bits, background level=2 bits.
+// 8 × 8 × 4 = 256 combinations, so there is no 7-bit packing stage.
+export const V22_S8_C8_B4_R3 = Object.freeze({
+  id: 'V2.2-S8-C8-B4-R3',
+  modulation: 'S8C8B4-R3',
+  logicalSize: 256,
+  cellSize: 16,
+  gridSize: 16,
+  shapeCalibrationRow: 0,
+  shapeCalibrationStartX: 3,
+  profileSignatureRow: 1,
+  profileSignatureStartX: 5,
+  profileSignatureBits: Object.freeze([0, 1, 1, 0, 1, 1]),
+  channelCalibrationRow: 2,
+  colorCalibrationStartX: 0,
+  backgroundCalibrationStartX: 8,
+  dataRowStart: 3,
+  dataRowEnd: 13,
+  shapeCount: 8,
+  colorCount: 8,
+  backgroundCount: 4,
+  bitsPerPhysicalCell: 8,
+  repetition: 3,
+  physicalDataCellCapacity: 176,
+  dataByteCapacity: 58,
+  encodedByteCapacity: 174,
+  lengthPrefixBytes: 2,
+  maxPacketBytes: 56,
+  recommendedProtocolPayloadBytes: 42,
 });
 
 export function getDataCellCoordinates(profile = V1_G16_C16) {
