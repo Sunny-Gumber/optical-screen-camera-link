@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07111f" />
+    <title>Prism Lab V3 — Stage 1 Reflection Engine</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">PRISM LAB V3 · PHYSICS CORE</p>
+          <h1>Reflection Engine</h1>
+          <p class="lede">Stage 1 test scene: one emitter, line-segment mirrors, exact vector reflection, real-time ray tracing.</p>
+        </div>
+        <div class="metrics" aria-live="polite">
+          <div><span>Segments</span><strong id="segmentCount">0</strong></div>
+          <div><span>Bounces</span><strong id="bounceCount">0</strong></div>
+          <div><span>Frame</span><strong id="frameCost">0 ms</strong></div>
+        </div>
+      </header>
+
+      <section class="stage-card">
+        <canvas id="stage" width="1200" height="720" aria-label="Reflection engine test scene"></canvas>
+        <aside class="controls">
+          <h2>Emitter</h2>
+          <label>Angle <output id="angleReadout">-8°</output></label>
+          <input id="angle" type="range" min="-35" max="35" value="-8" step="1" />
+
+          <h2>Diagnostics</h2>
+          <label class="toggle"><input id="showNormals" type="checkbox" checked /> Show mirror normals</label>
+          <label class="toggle"><input id="showHitDots" type="checkbox" checked /> Show hit points</label>
+
+          <button id="reset" type="button">Reset scene</button>
+
+          <section class="law-card">
+            <span>Law of reflection</span>
+            <strong>θᵢ = θᵣ</strong>
+            <p>The engine reflects the direction vector around the mirror normal; it does not use hand-authored bounce paths.</p>
+          </section>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
