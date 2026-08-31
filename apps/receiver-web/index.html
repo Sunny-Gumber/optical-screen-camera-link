@@ -35,9 +35,8 @@
       padding: 14px;
     }
     .camera-wrap { position: relative; overflow: hidden; border-radius: 12px; background: #05070a; }
-    #camera { width: 100%; max-height: 66vh; object-fit: contain; display: block; }
+    #camera { display: none; }
     #sourceCanvas { width: 100%; height: auto; display: block; background: #05070a; }
-    .preview-tabs { display: grid; grid-template-columns: 1fr; gap: 10px; }
     .pill {
       padding: 7px 10px;
       border-radius: 999px;
@@ -67,14 +66,15 @@
     .debug-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 12px; }
     .debug-grid canvas { width: 100%; height: auto; background: #000; border: 1px solid #2b3749; }
     #log { max-height: 220px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: #9fb0c5; }
-    .hint { color: #9aa8bb; font-size: 14px; line-height: 1.5; }
+    .hint { color: #9aa8bb; font-size: 14px; line-height: 1.55; }
+    .important { color: #ffd84a; }
     a { color: #8fc2ff; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Optical Receiver V1</h1>
-  <p class="sub">Camera → ROI lock → perspective correction → C16 calibration → packet CRC → transfer reassembly</p>
+  <h1>Optical Receiver V1.1</h1>
+  <p class="sub">Lightweight camera receiver · no OpenCV/WASM · manual alignment → C16 calibration → CRC → transfer reassembly</p>
 
   <div class="toolbar">
     <button id="startCamera">Start Camera</button>
@@ -87,11 +87,11 @@
   <section class="panel">
     <div class="status-row">
       <span id="cameraState" class="pill">Camera idle</span>
-      <span id="lockState" class="pill">No ROI</span>
+      <span id="lockState" class="pill">No frame</span>
       <span id="packetState" class="pill">No packet yet</span>
       <span id="transferState" class="pill">Waiting</span>
     </div>
-    <p class="hint">For the first test, open the sender on another screen, press <strong>Fullscreen Frame</strong>, keep the whole bright square visible, and hold the receiving phone fairly straight about 20–60 cm away.</p>
+    <p class="hint"><strong class="important">First-test method:</strong> on the sender use <strong>1 fps</strong> and <strong>Fullscreen Frame</strong>. On this receiver, press <strong>Start Camera</strong> and move closer/farther until the sender's complete <strong>outer white square</strong> fits inside the yellow square guide. Keep the phone reasonably straight. The guide turns green when a packet passes colour decoding and CRC.</p>
   </section>
 
   <section class="panel">
@@ -111,7 +111,7 @@
     <h2>Debug views</h2>
     <div class="debug-grid">
       <div>
-        <h3>Rectified 304×304 frame</h3>
+        <h3>Guide crop normalized to 304×304</h3>
         <canvas id="rectifiedCanvas" width="304" height="304"></canvas>
       </div>
       <div>
@@ -126,7 +126,6 @@
     <div id="log"></div>
   </section>
 </main>
-<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 <script type="module" src="./app.js"></script>
 </body>
 </html>
