@@ -23,6 +23,7 @@ let frames = [];
 let currentIndex = 0;
 let timer = null;
 let activeProfile = V2_S8_C32_R3;
+let visualVariant = 0;
 
 function selectedProfile() {
   return profileSelect.value === 'v1' ? V1_G16_C16 : V2_S8_C32_R3;
@@ -55,6 +56,7 @@ function renderCurrentFrame() {
     quietZone: 24,
     borderWidth: 4,
     showGrid: false,
+    visualVariant: activeProfile.id === V2_S8_C32_R3.id ? visualVariant : 0,
   });
 
   const inputBytes = new TextEncoder().encode(message.value).length;
@@ -66,7 +68,8 @@ function renderCurrentFrame() {
     `DATA packets: ${transfer.dataPacketCount}`,
     `Chunk: ${transfer.chunkSize} bytes`,
     `Rate: ${currentRateLabel()}`,
-  ].map((value) => `<span class="tag">${value}</span>`).join('');
+    activeProfile.id === V2_S8_C32_R3.id ? `Visual variant: ${visualVariant}` : null,
+  ].filter(Boolean).map((value) => `<span class="tag">${value}</span>`).join('');
 }
 
 function generateFrames() {
@@ -78,6 +81,14 @@ function generateFrames() {
   });
   frames = transfer.packets.map((packet) => encodeFrame(packet, activeProfile));
   currentIndex = 0;
+  visualVariant = 0;
+  renderCurrentFrame();
+}
+
+function advanceFrame(step = 1) {
+  if (!frames.length) return;
+  currentIndex = (currentIndex + step + frames.length) % frames.length;
+  if (activeProfile.id === V2_S8_C32_R3.id) visualVariant = (visualVariant + 1) & 0xFFFF;
   renderCurrentFrame();
 }
 
@@ -86,25 +97,18 @@ function startPlayback() {
   stopPlayback();
   playButton.textContent = 'Stop';
   const interval = Number(rateSelect.value) || 1000;
-  timer = setInterval(() => {
-    currentIndex = (currentIndex + 1) % frames.length;
-    renderCurrentFrame();
-  }, interval);
+  timer = setInterval(() => advanceFrame(1), interval);
 }
 
 generateButton.addEventListener('click', generateFrames);
 profileSelect.addEventListener('change', generateFrames);
 previousButton.addEventListener('click', () => {
   stopPlayback();
-  if (!frames.length) return;
-  currentIndex = (currentIndex - 1 + frames.length) % frames.length;
-  renderCurrentFrame();
+  advanceFrame(-1);
 });
 nextButton.addEventListener('click', () => {
   stopPlayback();
-  if (!frames.length) return;
-  currentIndex = (currentIndex + 1) % frames.length;
-  renderCurrentFrame();
+  advanceFrame(1);
 });
 playButton.addEventListener('click', () => {
   if (timer) stopPlayback();
