@@ -1,6 +1,7 @@
 import { decodePacket, FRAME_TYPE_NAMES, PacketError, TransferReassembler } from '../../packages/protocol/src/index.js';
 import { decodeRectifiedRoi } from './decoder.js';
 import { decodeS8C32Roi, detectV2Profile } from './v2-decoder.js';
+import { decodeS8C16Roi, detectV21Profile } from './v21-decoder.js';
 import {
   describeCameraError,
   listVideoInputs,
@@ -43,6 +44,8 @@ let lastCompletedSession = null;
 let metrics = createMetrics();
 let lastDetection = null;
 let locatorMisses = 0;
+let pendingDetection = null;
+let pendingDetectionCount = 0;
 
 function createMetrics() {
   return {
@@ -51,6 +54,7 @@ function createMetrics() {
     completedAt: null,
     captureFrames: 0,
     locatorDetections: 0,
+    locatorJumpRejects: 0,
     roiLocks: 0,
     opticalDecodeAttempts: 0,
     opticalDecodes: 0,
@@ -115,6 +119,7 @@ function renderMetrics() {
     ['Profile', metrics.lastProfile],
     ['Camera samples', metrics.captureFrames],
     ['4-locator detects', metrics.locatorDetections],
+    ['Rejected locator jumps', metrics.locatorJumpRejects],
     ['Valid frame locks', metrics.roiLocks],
     ['Optical decodes', metrics.opticalDecodes],
     ['Packet rejects', metrics.packetRejects],
@@ -151,6 +156,8 @@ function resetTransfer(reason = 'manual reset') {
 
 function clearAutoAlignment() {
   lastDetection = null;
+  pendingDetection = null;
+  pendingDetectionCount = 0;
   locatorMisses = 0;
 }
 
@@ -162,10 +169,7 @@ function averageCornerDistance(a, b) {
   }, 0) / 4;
 }
 
-function smoothDetection(previous, next, canvasWidth) {
-  if (!previous) return next;
-  const movement = averageCornerDistance(previous, next);
-  if (movement > Math.max(28, canvasWidth * 0.065)) return next;
+function smoothCloseDetection(previous, next) {
   const alpha = 0.42;
   return {
     ...next,
@@ -176,12 +180,45 @@ function smoothDetection(previous, next, canvasWidth) {
   };
 }
 
+function stabilizeDetection(previous, next, canvasWidth) {
+  if (!previous) {
+    pendingDetection = null;
+    pendingDetectionCount = 0;
+    return next;
+  }
+
+  const threshold = Math.max(28, canvasWidth * 0.065);
+  const movement = averageCornerDistance(previous, next);
+  if (movement <= threshold) {
+    pendingDetection = null;
+    pendingDetectionCount = 0;
+    return smoothCloseDetection(previous, next);
+  }
+
+  metrics.locatorJumpRejects += 1;
+  if (pendingDetection && averageCornerDistance(pendingDetection, next) <= threshold) {
+    pendingDetection = smoothCloseDetection(pendingDetection, next);
+    pendingDetectionCount += 1;
+  } else {
+    pendingDetection = next;
+    pendingDetectionCount = 1;
+  }
+
+  // Real camera movement persists. A one-frame false locator does not.
+  if (pendingDetectionCount >= 3) {
+    const accepted = pendingDetection;
+    pendingDetection = null;
+    pendingDetectionCount = 0;
+    return accepted;
+  }
+  return previous;
+}
+
 async function refreshCameraList(preferredDeviceId = '') {
   try {
     const devices = await listVideoInputs(navigator.mediaDevices);
     const previous = preferredDeviceId || cameraSelect.value;
     cameraSelect.innerHTML = '';
-
     if (!devices.length) {
       const option = document.createElement('option');
       option.value = '';
@@ -190,18 +227,14 @@ async function refreshCameraList(preferredDeviceId = '') {
       cameraSelect.disabled = true;
       return;
     }
-
     devices.forEach((device, index) => {
       const option = document.createElement('option');
       option.value = device.deviceId;
       option.textContent = device.label || `Camera ${index + 1}`;
       cameraSelect.append(option);
     });
-
     cameraSelect.disabled = false;
-    if (previous && devices.some((device) => device.deviceId === previous)) {
-      cameraSelect.value = previous;
-    }
+    if (previous && devices.some((device) => device.deviceId === previous)) cameraSelect.value = previous;
   } catch (error) {
     log(`Unable to list cameras: ${error.message}`);
   }
@@ -213,14 +246,12 @@ async function startCamera() {
   showCameraError(null);
   setPill(cameraState, 'Requesting camera…', 'working');
   setPill(lockState, 'Starting camera…', 'working');
-
   try {
     if (!window.isSecureContext) {
       const error = new Error('This page is not in a secure context');
       error.name = 'SecurityError';
       throw error;
     }
-
     const selectedDeviceId = cameraSelect.value || '';
     const opened = await openCameraWithFallback(
       navigator.mediaDevices,
@@ -230,22 +261,19 @@ async function startCamera() {
         log(`Trying camera mode: ${label}`);
       },
     );
-
     stream = opened.stream;
     video.srcObject = stream;
     await video.play();
-
     running = true;
     stopButton.disabled = false;
     const track = stream.getVideoTracks()[0];
     const settings = track?.getSettings?.() || {};
     await refreshCameraList(settings.deviceId || selectedDeviceId);
-
     clearAutoAlignment();
     setPill(cameraState, `${video.videoWidth}×${video.videoHeight} active`, 'good');
     setPill(lockState, 'Searching 4 locators', 'working');
     showCameraError(null);
-    log(`Camera started using ${opened.attempt}. Automatic V1/V2 optical detection is active.`);
+    log(`Camera started using ${opened.attempt}. Automatic V1/V2/V2.1 optical detection is active.`);
     scheduleLoop(0);
   } catch (error) {
     if (stream) {
@@ -255,7 +283,6 @@ async function startCamera() {
     video.srcObject = null;
     startButton.disabled = false;
     stopButton.disabled = true;
-
     const info = describeCameraError(error);
     setPill(cameraState, info.title, 'bad');
     setPill(lockState, 'No frame');
@@ -270,9 +297,7 @@ function stopCamera() {
   running = false;
   if (loopTimer) clearTimeout(loopTimer);
   loopTimer = null;
-  if (stream) {
-    for (const track of stream.getTracks()) track.stop();
-  }
+  if (stream) for (const track of stream.getTracks()) track.stop();
   stream = null;
   video.srcObject = null;
   clearAutoAlignment();
@@ -325,11 +350,7 @@ function handleValidPacket(packetBytes, opticalResult) {
   const status = receiver.addPacket(packetBytes);
   seenPackets.add(key);
   metrics.acceptedUniquePackets += 1;
-  setPill(
-    packetState,
-    `${FRAME_TYPE_NAMES[decoded.frameType]} #${decoded.sequence} · ${(opticalResult.averageConfidence * 100).toFixed(0)}%`,
-    'good',
-  );
+  setPill(packetState, `${FRAME_TYPE_NAMES[decoded.frameType]} #${decoded.sequence} · ${(opticalResult.averageConfidence * 100).toFixed(0)}%`, 'good');
 
   if (status.complete) {
     if (lastCompletedSession !== status.sessionId) {
@@ -342,19 +363,16 @@ function handleValidPacket(packetBytes, opticalResult) {
     }
   } else {
     const expected = status.expectedDataPackets === null ? '?' : status.expectedDataPackets;
-    setPill(
-      transferState,
-      `Session ${status.sessionId} · ${status.receivedDataPackets}/${expected} DATA`,
-      'working',
-    );
+    setPill(transferState, `Session ${status.sessionId} · ${status.receivedDataPackets}/${expected} DATA`, 'working');
   }
-
   return decoded;
 }
 
 function decodeCurrentOpticalFrame() {
-  const probe = detectV2Profile(roiCanvas);
-  if (probe.isV2) return decodeS8C32Roi(roiCanvas);
+  const robustProbe = detectV21Profile(roiCanvas);
+  if (robustProbe.isV21) return decodeS8C16Roi(roiCanvas);
+  const fastProbe = detectV2Profile(roiCanvas);
+  if (fastProbe.isV2) return decodeS8C32Roi(roiCanvas);
   const result = decodeRectifiedRoi(roiCanvas);
   return { ...result, profileId: 'V1-G16-C16-R3' };
 }
@@ -364,20 +382,18 @@ async function processFrame() {
     scheduleLoop();
     return;
   }
-
   try {
     metrics.captureFrames += 1;
     drawVideoFrame(video, sourceCanvas);
-
     const detection = detectFrameFiducials(sourceCanvas);
     if (detection) {
-      lastDetection = smoothDetection(lastDetection, detection, sourceCanvas.width);
+      lastDetection = stabilizeDetection(lastDetection, detection, sourceCanvas.width);
       locatorMisses = 0;
       metrics.locatorDetections += 1;
       metrics.lastLocatorScore = detection.score;
     } else {
       locatorMisses += 1;
-      if (locatorMisses > 5) lastDetection = null;
+      if (locatorMisses > 5) clearAutoAlignment();
     }
 
     if (!lastDetection) {
@@ -391,7 +407,6 @@ async function processFrame() {
     rectifyFiducials(sourceCanvas, rectifiedCanvas, lastDetection.corners);
     extractLogicalRoi(rectifiedCanvas, roiCanvas);
     metrics.opticalDecodeAttempts += 1;
-
     let decodedOk = false;
     try {
       const opticalResult = decodeCurrentOpticalFrame();
@@ -404,7 +419,6 @@ async function processFrame() {
       metrics.colorCorrections = opticalResult.colorCorrections ?? 0;
       metrics.shapeUncorrectable = opticalResult.shapeUncorrectable ?? 0;
       metrics.colorUncorrectable = opticalResult.colorUncorrectable ?? 0;
-
       handleValidPacket(opticalResult.packetBytes, opticalResult);
       metrics.roiLocks += 1;
       decodedOk = true;
@@ -413,18 +427,14 @@ async function processFrame() {
     } catch (error) {
       metrics.lastError = error.message;
       setPill(lockState, '4 locators found · decoding', 'working');
-      if (!String(error.message).includes('CRC')) {
-        setPill(packetState, 'Waiting for clean frame');
-      }
+      if (!String(error.message).includes('CRC')) setPill(packetState, 'Waiting for clean frame');
     }
-
     drawAutoFiducialOverlay(sourceCanvas, lastDetection, decodedOk ? 'decoded' : 'found');
   } catch (error) {
     metrics.lastError = error.message;
     setPill(lockState, 'Auto-align error', 'bad');
     log(`Frame processing error: ${error.message}`);
   }
-
   renderMetrics();
   scheduleLoop();
 }
