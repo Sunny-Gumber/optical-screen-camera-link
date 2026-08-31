@@ -1,22 +1,13 @@
-export const CAPTURE_MAX_WIDTH = 960;
+export const CAPTURE_MAX_WIDTH = 640;
 export const RECTIFIED_SIZE = 304;
 export const QUIET_ZONE = 24;
 export const LOGICAL_SIZE = 256;
+export const DEFAULT_GUIDE_COVERAGE = 0.82;
 
-export async function waitForOpenCv(timeoutMs = 20000) {
-  const started = performance.now();
-
-  while (performance.now() - started < timeoutMs) {
-    if (globalThis.cv instanceof Promise) {
-      globalThis.cv = await globalThis.cv;
-    }
-    if (globalThis.cv?.Mat && globalThis.cv?.findContours) return globalThis.cv;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  throw new Error('OpenCV.js did not become ready');
-}
-
+/**
+ * Draw the current camera frame into a modest-size processing canvas.
+ * Keeping this small is intentional: V1 prioritizes a responsive phone UI.
+ */
 export function drawVideoFrame(video, canvas, maxWidth = CAPTURE_MAX_WIDTH) {
   const sourceWidth = video.videoWidth || 1280;
   const sourceHeight = video.videoHeight || 720;
@@ -34,141 +25,50 @@ export function drawVideoFrame(video, canvas, maxWidth = CAPTURE_MAX_WIDTH) {
   return { width, height, scale };
 }
 
-function pointDistance(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function orderQuad(points) {
-  const sums = points.map((point) => point.x + point.y);
-  const diffs = points.map((point) => point.x - point.y);
-
-  const minIndex = (values) => values.indexOf(Math.min(...values));
-  const maxIndex = (values) => values.indexOf(Math.max(...values));
-
-  return {
-    tl: points[minIndex(sums)],
-    br: points[maxIndex(sums)],
-    tr: points[maxIndex(diffs)],
-    bl: points[minIndex(diffs)],
-  };
-}
-
-function quadQuality(quad) {
-  const sides = [
-    pointDistance(quad.tl, quad.tr),
-    pointDistance(quad.tr, quad.br),
-    pointDistance(quad.br, quad.bl),
-    pointDistance(quad.bl, quad.tl),
-  ];
-  const minimum = Math.max(1, Math.min(...sides));
-  const maximum = Math.max(...sides);
-  const sideRatio = maximum / minimum;
-  const diagonalA = pointDistance(quad.tl, quad.br);
-  const diagonalB = pointDistance(quad.tr, quad.bl);
-  const diagonalRatio = Math.max(diagonalA, diagonalB) / Math.max(1, Math.min(diagonalA, diagonalB));
-  return { sideRatio, diagonalRatio };
-}
-
-function contourToPoints(approx) {
-  const values = approx.data32S;
-  const points = [];
-  for (let i = 0; i < values.length; i += 2) {
-    points.push({ x: values[i], y: values[i + 1] });
+/**
+ * V1.1 uses a centered square alignment guide instead of OpenCV.js.
+ * This avoids the large WASM startup cost and lets us validate the optical
+ * colour/data channel independently of automatic geometry detection.
+ */
+export function getCenteredGuideRect(width, height, coverage = DEFAULT_GUIDE_COVERAGE) {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    throw new RangeError('Guide dimensions must be positive numbers');
   }
-  return points;
+  if (!Number.isFinite(coverage) || coverage <= 0 || coverage > 1) {
+    throw new RangeError('Guide coverage must be > 0 and <= 1');
+  }
+
+  const side = Math.max(1, Math.floor(Math.min(width, height) * coverage));
+  const x = Math.floor((width - side) / 2);
+  const y = Math.floor((height - side) / 2);
+  return { x, y, width: side, height: side };
 }
 
-export function detectAndRectify(cv, sourceCanvas, rectifiedCanvas) {
-  const src = cv.imread(sourceCanvas);
-  const gray = new cv.Mat();
-  const blur = new cv.Mat();
-  const binary = new cv.Mat();
-  const contours = new cv.MatVector();
-  const hierarchy = new cv.Mat();
-  let best = null;
+/**
+ * Crop the manual alignment guide and normalize it to the expected 304x304
+ * optical frame (24px quiet zone + 256px logical ROI + 24px quiet zone).
+ */
+export function rectifyGuide(sourceCanvas, rectifiedCanvas, guide = null) {
+  const rect = guide ?? getCenteredGuideRect(sourceCanvas.width, sourceCanvas.height);
+  rectifiedCanvas.width = RECTIFIED_SIZE;
+  rectifiedCanvas.height = RECTIFIED_SIZE;
 
-  try {
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-    cv.threshold(blur, binary, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+  const ctx = rectifiedCanvas.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.clearRect(0, 0, RECTIFIED_SIZE, RECTIFIED_SIZE);
+  ctx.drawImage(
+    sourceCanvas,
+    rect.x,
+    rect.y,
+    rect.width,
+    rect.height,
+    0,
+    0,
+    RECTIFIED_SIZE,
+    RECTIFIED_SIZE,
+  );
 
-    const frameArea = src.cols * src.rows;
-
-    for (let i = 0; i < contours.size(); i += 1) {
-      const contour = contours.get(i);
-      const area = cv.contourArea(contour, false);
-      if (area < frameArea * 0.035 || area > frameArea * 0.95) {
-        contour.delete();
-        continue;
-      }
-
-      const perimeter = cv.arcLength(contour, true);
-      const approx = new cv.Mat();
-      cv.approxPolyDP(contour, approx, perimeter * 0.025, true);
-
-      if (approx.rows === 4 && cv.isContourConvex(approx)) {
-        const points = contourToPoints(approx);
-        const quad = orderQuad(points);
-        const quality = quadQuality(quad);
-        const score = area / (quality.sideRatio * quality.diagonalRatio);
-
-        if (quality.sideRatio < 3.8 && quality.diagonalRatio < 2.4 && (!best || score > best.score)) {
-          best = { area, score, quad, quality };
-        }
-      }
-
-      approx.delete();
-      contour.delete();
-    }
-
-    if (!best) return null;
-
-    const { tl, tr, br, bl } = best.quad;
-    const sourcePoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      tl.x, tl.y,
-      tr.x, tr.y,
-      br.x, br.y,
-      bl.x, bl.y,
-    ]);
-    const targetPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0,
-      RECTIFIED_SIZE - 1, 0,
-      RECTIFIED_SIZE - 1, RECTIFIED_SIZE - 1,
-      0, RECTIFIED_SIZE - 1,
-    ]);
-    const matrix = cv.getPerspectiveTransform(sourcePoints, targetPoints);
-    const warped = new cv.Mat();
-
-    try {
-      cv.warpPerspective(
-        src,
-        warped,
-        matrix,
-        new cv.Size(RECTIFIED_SIZE, RECTIFIED_SIZE),
-        cv.INTER_LINEAR,
-        cv.BORDER_CONSTANT,
-        new cv.Scalar(0, 0, 0, 255),
-      );
-      rectifiedCanvas.width = RECTIFIED_SIZE;
-      rectifiedCanvas.height = RECTIFIED_SIZE;
-      cv.imshow(rectifiedCanvas, warped);
-    } finally {
-      sourcePoints.delete();
-      targetPoints.delete();
-      matrix.delete();
-      warped.delete();
-    }
-
-    return best;
-  } finally {
-    src.delete();
-    gray.delete();
-    blur.delete();
-    binary.delete();
-    contours.delete();
-    hierarchy.delete();
-  }
+  return rect;
 }
 
 export function extractLogicalRoi(rectifiedCanvas, roiCanvas) {
@@ -189,23 +89,57 @@ export function extractLogicalRoi(rectifiedCanvas, roiCanvas) {
   );
 }
 
-export function drawQuadOverlay(canvas, quad) {
+/**
+ * Draw the alignment guide after the processing crop has already been copied.
+ * The small corner ticks make it easier to match the sender's outer white square.
+ */
+export function drawGuideOverlay(canvas, guide, state = 'align') {
   const ctx = canvas.getContext('2d');
+  const good = state === 'locked';
+  const stroke = good ? '#00ff88' : '#ffd84a';
+  const tick = Math.max(14, Math.round(guide.width * 0.07));
+
   ctx.save();
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = '#00ff88';
-  ctx.fillStyle = '#00ff88';
+  ctx.lineWidth = Math.max(3, Math.round(canvas.width / 220));
+  ctx.strokeStyle = stroke;
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+
+  // Dim only the area outside the guide so the target remains easy to see.
   ctx.beginPath();
-  ctx.moveTo(quad.tl.x, quad.tl.y);
-  ctx.lineTo(quad.tr.x, quad.tr.y);
-  ctx.lineTo(quad.br.x, quad.br.y);
-  ctx.lineTo(quad.bl.x, quad.bl.y);
-  ctx.closePath();
-  ctx.stroke();
-  for (const point of [quad.tl, quad.tr, quad.br, quad.bl]) {
+  ctx.rect(0, 0, canvas.width, canvas.height);
+  ctx.rect(guide.x, guide.y, guide.width, guide.height);
+  ctx.fill('evenodd');
+
+  ctx.setLineDash([10, 7]);
+  ctx.strokeRect(guide.x, guide.y, guide.width, guide.height);
+  ctx.setLineDash([]);
+
+  const corners = [
+    [guide.x, guide.y, 1, 1],
+    [guide.x + guide.width, guide.y, -1, 1],
+    [guide.x, guide.y + guide.height, 1, -1],
+    [guide.x + guide.width, guide.y + guide.height, -1, -1],
+  ];
+
+  ctx.lineWidth += 1;
+  for (const [x, y, sx, sy] of corners) {
     ctx.beginPath();
-    ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(x, y + (sy * tick));
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + (sx * tick), y);
+    ctx.stroke();
   }
+
+  const label = good ? 'FRAME LOCKED' : 'ALIGN OUTER WHITE SQUARE HERE';
+  ctx.font = `600 ${Math.max(12, Math.round(canvas.width / 42))}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  const labelX = guide.x + (guide.width / 2);
+  const labelY = Math.max(18, guide.y - 8);
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.lineWidth = 4;
+  ctx.strokeText(label, labelX, labelY);
+  ctx.fillStyle = stroke;
+  ctx.fillText(label, labelX, labelY);
   ctx.restore();
 }
