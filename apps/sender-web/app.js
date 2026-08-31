@@ -4,6 +4,8 @@ import {
   V2_S8_C32_R3,
   V21_S8_C16_R3,
   V22_S8_C8_B4_R3,
+  V3_G32_S4_C4_RS,
+  V3_G48_S4_C4_RS,
   V3_G64_S4_C4_RS,
   encodeOpticalFrame,
   encodeS8C32Frame,
@@ -28,7 +30,7 @@ let transfer = null;
 let frames = [];
 let currentIndex = 0;
 let timer = null;
-let activeProfile = V3_G64_S4_C4_RS;
+let activeProfile = V3_G32_S4_C4_RS;
 let visualVariant = 0;
 
 function selectedProfile() {
@@ -36,11 +38,17 @@ function selectedProfile() {
   if (profileSelect.value === 'v21') return V21_S8_C16_R3;
   if (profileSelect.value === 'v22') return V22_S8_C8_B4_R3;
   if (profileSelect.value === 'v2') return V2_S8_C32_R3;
-  return V3_G64_S4_C4_RS;
+  if (profileSelect.value === 'v3b') return V3_G48_S4_C4_RS;
+  if (profileSelect.value === 'v3d') return V3_G64_S4_C4_RS;
+  return V3_G32_S4_C4_RS;
+}
+
+function isV3Profile(profile) {
+  return profile.version === 30 && profile.modulation === 'S4C4-RS15-11';
 }
 
 function encoderForProfile(profile) {
-  if (profile.id === V3_G64_S4_C4_RS.id) return encodeV3Frame;
+  if (isV3Profile(profile)) return encodeV3Frame;
   if (profile.id === V22_S8_C8_B4_R3.id) return encodeS8C8B4Frame;
   if (profile.id === V21_S8_C16_R3.id) return encodeS8C16Frame;
   if (profile.id === V2_S8_C32_R3.id) return encodeS8C32Frame;
@@ -69,7 +77,7 @@ function renderCurrentFrame() {
     return;
   }
 
-  const v3 = activeProfile.id === V3_G64_S4_C4_RS.id;
+  const v3 = isV3Profile(activeProfile);
   frameHost.innerHTML = renderOpticalFrameSvg(frames[currentIndex], {
     scale: v3 ? 1 : 2,
     borderWidth: v3 ? 6 : 4,
@@ -87,6 +95,8 @@ function renderCurrentFrame() {
     `Chunk: ${transfer.chunkSize} bytes`,
     `Rate: ${currentRateLabel()}`,
     v3 ? `Grid: ${activeProfile.gridSize}×${activeProfile.gridSize}` : null,
+    v3 ? `Cell: ${activeProfile.cellSize}px logical` : null,
+    v3 ? `Protected envelope: ${activeProfile.dataByteCapacity} bytes` : null,
     v3 ? `RS: (${activeProfile.rsN},${activeProfile.rsK}) · corrects ${activeProfile.rsCorrectableSymbols}/block` : null,
     isLegacyHybridProfile(activeProfile) ? `Visual variant: ${visualVariant}` : null,
   ].filter(Boolean).map((value) => `<span class="tag">${value}</span>`).join('');
