@@ -102,50 +102,85 @@ export const V22_S8_C8_B4_R3 = Object.freeze({
   recommendedProtocolPayloadBytes: 42,
 });
 
-// V3 changes the strategy: many simple cells rather than many states per cell.
-// The complete frame is exactly 3x the V1 geometry (912px vs 304px), allowing
-// the existing low-resolution locator path to acquire it before a native/high-
-// resolution second warp is used for data decoding.
-export const V3_G64_S4_C4_RS = Object.freeze({
-  id: 'V3-G64-S4-C4-RS15-11',
-  modulation: 'S4C4-RS15-11',
-  version: 30,
-  totalSize: 912,
-  quietZone: 72,
-  fiducialScale: 3,
-  logicalSize: 768,
-  cellSize: 12,
-  gridSize: 64,
-  timingBorder: true,
-  finderSizeCells: 2,
-  finderOrigins: Object.freeze([
-    Object.freeze({ corner: 'TL', x: 1, y: 1 }),
-    Object.freeze({ corner: 'TR', x: 61, y: 1 }),
-    Object.freeze({ corner: 'BL', x: 1, y: 61 }),
-    Object.freeze({ corner: 'BR', x: 61, y: 61 }),
-  ]),
-  calibrationRow: 3,
-  colorCalibrationStartX: 4,
-  shapeCalibrationStartX: 9,
-  profileSignatureStartX: 14,
-  profileSignatureBits: Object.freeze([1, 0, 1, 1, 0, 0, 1, 0]),
-  shapeCount: 4,
-  colorCount: 4,
-  bitsPerCell: 4,
-  rsN: 15,
-  rsK: 11,
-  rsParity: 4,
-  rsCorrectableSymbols: 2,
-  rsCodewordCount: 254,
-  encodedSymbolCapacity: 3810,
-  dataNibbleCapacity: 2794,
-  dataByteCapacity: 1397,
-  lengthPrefixBytes: 2,
-  maxPacketBytes: 1395,
-  // Reliability-first first target. The profile can carry more, but 1024-byte
-  // chunks avoid requiring every RS block to decode during early tests.
-  recommendedProtocolPayloadBytes: 1024,
+function createV3Profile({ id, gridSize, signature, codewords, payload }) {
+  const logicalSize = 768;
+  const cellSize = logicalSize / gridSize;
+  const encodedSymbolCapacity = codewords * 15;
+  const dataNibbleCapacity = codewords * 11;
+  const dataByteCapacity = dataNibbleCapacity / 2;
+  return Object.freeze({
+    id,
+    modulation: 'S4C4-RS15-11',
+    version: 30,
+    totalSize: 912,
+    quietZone: 72,
+    fiducialScale: 3,
+    logicalSize,
+    cellSize,
+    gridSize,
+    timingBorder: true,
+    finderSizeCells: 2,
+    finderOrigins: Object.freeze([
+      Object.freeze({ corner: 'TL', x: 1, y: 1 }),
+      Object.freeze({ corner: 'TR', x: gridSize - 3, y: 1 }),
+      Object.freeze({ corner: 'BL', x: 1, y: gridSize - 3 }),
+      Object.freeze({ corner: 'BR', x: gridSize - 3, y: gridSize - 3 }),
+    ]),
+    calibrationRow: 3,
+    colorCalibrationStartX: 4,
+    shapeCalibrationStartX: 9,
+    profileSignatureStartX: 14,
+    profileSignatureBits: Object.freeze(signature),
+    shapeCount: 4,
+    colorCount: 4,
+    bitsPerCell: 4,
+    rsN: 15,
+    rsK: 11,
+    rsParity: 4,
+    rsCorrectableSymbols: 2,
+    rsCodewordCount: codewords,
+    encodedSymbolCapacity,
+    dataNibbleCapacity,
+    dataByteCapacity,
+    lengthPrefixBytes: 2,
+    maxPacketBytes: dataByteCapacity - 2,
+    recommendedProtocolPayloadBytes: payload,
+  });
+}
+
+// Adaptive V3 density ladder. All three profiles use the same 768×768 logical
+// ROI, outer fiducials, S4×C4 alphabet and RS(15,11) FEC. Only symbol density
+// changes, so the receiver can start reliable and increase density after the
+// measured channel quality supports it.
+export const V3_G32_S4_C4_RS = createV3Profile({
+  id: 'V3-G32-S4-C4-RS15-11',
+  gridSize: 32,
+  signature: [1, 1, 0, 0, 1, 0, 1, 0],
+  codewords: 56,
+  payload: 256,
 });
+
+export const V3_G48_S4_C4_RS = createV3Profile({
+  id: 'V3-G48-S4-C4-RS15-11',
+  gridSize: 48,
+  signature: [0, 1, 1, 0, 0, 1, 0, 1],
+  codewords: 138,
+  payload: 640,
+});
+
+export const V3_G64_S4_C4_RS = createV3Profile({
+  id: 'V3-G64-S4-C4-RS15-11',
+  gridSize: 64,
+  signature: [1, 0, 1, 1, 0, 0, 1, 0],
+  codewords: 254,
+  payload: 1024,
+});
+
+export const V3_PROFILES = Object.freeze([
+  V3_G32_S4_C4_RS,
+  V3_G48_S4_C4_RS,
+  V3_G64_S4_C4_RS,
+]);
 
 export function getDataCellCoordinates(profile = V1_G16_C16) {
   const cells = [];
