@@ -37,6 +37,26 @@ function repeatBytesInterleaved(bytes, repetition) {
   return encoded;
 }
 
+/**
+ * Fill bytes that are outside the declared packet with deterministic mixed
+ * optical values instead of 0x00. The receiver ignores these bytes after it
+ * reads the 2-byte packet length, but distributing shapes/colours prevents a
+ * short packet from painting most of the frame with one locator-like symbol.
+ */
+export function fillV2Padding(envelope, usedBytes, packetBytes = new Uint8Array(0)) {
+  let state = 0xA7 ^ (usedBytes & 0xFF);
+  for (const value of packetBytes) {
+    state = ((state * 33) ^ value ^ 0x5D) & 0xFF;
+  }
+
+  for (let i = usedBytes; i < envelope.length; i += 1) {
+    state = ((state * 73) + 41 + (i * 17)) & 0xFF;
+    // Keep the filler distributed even if the PRNG happens to hit zero.
+    envelope[i] = state === 0 ? (0x5A ^ i) & 0xFF : state;
+  }
+  return envelope;
+}
+
 export function encodeS8C32Frame(packetBytes, profile = V2_S8_C32_R3) {
   if (!(packetBytes instanceof Uint8Array)) {
     throw new TypeError('encodeS8C32Frame expects packet bytes as Uint8Array');
@@ -51,6 +71,8 @@ export function encodeS8C32Frame(packetBytes, profile = V2_S8_C32_R3) {
   const view = new DataView(envelope.buffer);
   view.setUint16(0, packetBytes.length, false);
   envelope.set(packetBytes, profile.lengthPrefixBytes);
+  const usedBytes = profile.lengthPrefixBytes + packetBytes.length;
+  fillV2Padding(envelope, usedBytes, packetBytes);
 
   const repeated = repeatBytesInterleaved(envelope, profile.repetition);
   if (repeated.length !== profile.encodedByteCapacity) {
