@@ -8,28 +8,34 @@ export const V3_COLORS = Object.freeze([
   Object.freeze({ id: 3, name: 'yellow', rgb: Object.freeze([245, 205, 35]) }),
 ]);
 
-// Six-by-six masks. At a 12px optical cell every mask module is 2x2 logical
-// pixels. These patterns were chosen to remain distinct after blur and warp.
+// Three-by-three masks. A V3 cell is 12 logical pixels, therefore every mask
+// module is a large 4x4 logical block. At the ~8 camera-pixels/cell measured in
+// the first physical test this gives roughly 2.5 camera pixels per module rather
+// than ~1.3 pixels with the old 6x6 masks.
+//
+// The patterns deliberately use very different first-order geometry: a broad
+// vertical bar, broad horizontal bar and the two diagonals. They are not font
+// glyphs and do not depend on browser text rendering.
 export const V3_SHAPES = Object.freeze([
   Object.freeze({
     id: 0,
     name: 'vertical',
-    mask: Object.freeze(['001100', '001100', '001100', '001100', '001100', '001100']),
+    mask: Object.freeze(['010', '010', '010']),
   }),
   Object.freeze({
     id: 1,
     name: 'horizontal',
-    mask: Object.freeze(['000000', '000000', '111111', '111111', '000000', '000000']),
+    mask: Object.freeze(['000', '111', '000']),
   }),
   Object.freeze({
     id: 2,
     name: 'diag-down',
-    mask: Object.freeze(['110000', '111000', '011100', '001110', '000111', '000011']),
+    mask: Object.freeze(['100', '010', '001']),
   }),
   Object.freeze({
     id: 3,
     name: 'diag-up',
-    mask: Object.freeze(['000011', '000111', '001110', '011100', '111000', '110000']),
+    mask: Object.freeze(['001', '010', '100']),
   }),
 ]);
 
