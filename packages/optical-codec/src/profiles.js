@@ -45,8 +45,6 @@ export const V2_S8_C32_R3 = Object.freeze({
   recommendedProtocolPayloadBytes: 37,
 });
 
-// Reliability-first hybrid profile. 8 shapes provide 3 bits and 16 colours
-// provide 4 bits, so each logical symbol carries 7 bits.
 export const V21_S8_C16_R3 = Object.freeze({
   id: 'V2.1-S8-C16-R3',
   modulation: 'S8C16-R3',
@@ -75,9 +73,6 @@ export const V21_S8_C16_R3 = Object.freeze({
   recommendedProtocolPayloadBytes: 34,
 });
 
-// V2.2 splits one full byte across three independently calibrated optical
-// variables: shape=3 bits, foreground colour=3 bits, background level=2 bits.
-// 8 × 8 × 4 = 256 combinations, so there is no 7-bit packing stage.
 export const V22_S8_C8_B4_R3 = Object.freeze({
   id: 'V2.2-S8-C8-B4-R3',
   modulation: 'S8C8B4-R3',
@@ -107,12 +102,82 @@ export const V22_S8_C8_B4_R3 = Object.freeze({
   recommendedProtocolPayloadBytes: 42,
 });
 
+// V3 changes the strategy: many simple cells rather than many states per cell.
+// The complete frame is exactly 3x the V1 geometry (912px vs 304px), allowing
+// the existing low-resolution locator path to acquire it before a native/high-
+// resolution second warp is used for data decoding.
+export const V3_G64_S4_C4_RS = Object.freeze({
+  id: 'V3-G64-S4-C4-RS15-11',
+  modulation: 'S4C4-RS15-11',
+  version: 30,
+  totalSize: 912,
+  quietZone: 72,
+  fiducialScale: 3,
+  logicalSize: 768,
+  cellSize: 12,
+  gridSize: 64,
+  timingBorder: true,
+  finderSizeCells: 2,
+  finderOrigins: Object.freeze([
+    Object.freeze({ corner: 'TL', x: 1, y: 1 }),
+    Object.freeze({ corner: 'TR', x: 61, y: 1 }),
+    Object.freeze({ corner: 'BL', x: 1, y: 61 }),
+    Object.freeze({ corner: 'BR', x: 61, y: 61 }),
+  ]),
+  calibrationRow: 3,
+  colorCalibrationStartX: 4,
+  shapeCalibrationStartX: 9,
+  profileSignatureStartX: 14,
+  profileSignatureBits: Object.freeze([1, 0, 1, 1, 0, 0, 1, 0]),
+  shapeCount: 4,
+  colorCount: 4,
+  bitsPerCell: 4,
+  rsN: 15,
+  rsK: 11,
+  rsParity: 4,
+  rsCorrectableSymbols: 2,
+  rsCodewordCount: 254,
+  encodedSymbolCapacity: 3810,
+  dataNibbleCapacity: 2794,
+  dataByteCapacity: 1397,
+  lengthPrefixBytes: 2,
+  maxPacketBytes: 1395,
+  // Reliability-first first target. The profile can carry more, but 1024-byte
+  // chunks avoid requiring every RS block to decode during early tests.
+  recommendedProtocolPayloadBytes: 1024,
+});
+
 export function getDataCellCoordinates(profile = V1_G16_C16) {
   const cells = [];
   for (let y = profile.dataRowStart; y <= profile.dataRowEnd; y += 1) {
-    for (let x = 0; x < profile.gridSize; x += 1) {
-      cells.push({ x, y });
-    }
+    for (let x = 0; x < profile.gridSize; x += 1) cells.push({ x, y });
   }
   return cells;
+}
+
+function v3ReservedCell(profile, x, y) {
+  if (x === 0 || y === 0 || x === profile.gridSize - 1 || y === profile.gridSize - 1) return true;
+
+  for (const finder of profile.finderOrigins) {
+    if (x >= finder.x && x < finder.x + profile.finderSizeCells
+      && y >= finder.y && y < finder.y + profile.finderSizeCells) return true;
+  }
+
+  if (y === profile.calibrationRow) {
+    if (x >= profile.colorCalibrationStartX && x < profile.colorCalibrationStartX + profile.colorCount) return true;
+    if (x >= profile.shapeCalibrationStartX && x < profile.shapeCalibrationStartX + profile.shapeCount) return true;
+    if (x >= profile.profileSignatureStartX
+      && x < profile.profileSignatureStartX + profile.profileSignatureBits.length) return true;
+  }
+  return false;
+}
+
+export function getV3DataCellCoordinates(profile = V3_G64_S4_C4_RS) {
+  const cells = [];
+  for (let y = 0; y < profile.gridSize; y += 1) {
+    for (let x = 0; x < profile.gridSize; x += 1) {
+      if (!v3ReservedCell(profile, x, y)) cells.push({ x, y });
+    }
+  }
+  return cells.slice(0, profile.encodedSymbolCapacity);
 }
