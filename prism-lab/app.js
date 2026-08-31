@@ -96,9 +96,9 @@ const levels = [
     par: 7,
     source: { x: 95, y: 350, angle: 0, spectrum: ['red', 'green', 'blue'] },
     targets: [
-      { x: 1060, y: 315, r: 22, color: 'red' },
-      { x: 1060, y: 350, r: 22, color: 'green' },
-      { x: 1060, y: 385, r: 22, color: 'blue' }
+      { x: 1018, y: 650, r: 18, color: 'red' },
+      { x: 993, y: 650, r: 18, color: 'green' },
+      { x: 959, y: 650, r: 18, color: 'blue' }
     ],
     components: [{ type: 'prism', x: 610, y: 350, angle: 2, size: 205, dispersion: 4 }]
   },
