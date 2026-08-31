@@ -1,6 +1,7 @@
 // Reed-Solomon RS(15,11) over GF(16), primitive polynomial x^4 + x + 1 (0x13).
 // Symbols are nibbles (0..15), which maps directly to the V3 optical alphabet.
-// Four parity symbols correct up to two arbitrary symbol errors per codeword.
+// Four parity symbols correct up to two arbitrary unknown symbol errors, or up
+// to four known erasures, or mixed errors/erasures satisfying 2e + s <= 4.
 
 export const RS16_N = 15;
 export const RS16_K = 11;
@@ -45,9 +46,7 @@ export function gf16PowAlpha(power) {
 function polyMul(a, b) {
   const out = new Uint8Array(a.length + b.length - 1);
   for (let i = 0; i < a.length; i += 1) {
-    for (let j = 0; j < b.length; j += 1) {
-      out[i + j] ^= gf16Mul(a[i], b[j]);
-    }
+    for (let j = 0; j < b.length; j += 1) out[i + j] ^= gf16Mul(a[i], b[j]);
   }
   return out;
 }
@@ -95,9 +94,7 @@ export function rs16Encode(dataSymbols) {
   for (let i = 0; i < RS16_K; i += 1) {
     const coefficient = work[i];
     if (coefficient === 0) continue;
-    for (let j = 1; j < GENERATOR.length; j += 1) {
-      work[i + j] ^= gf16Mul(GENERATOR[j], coefficient);
-    }
+    for (let j = 1; j < GENERATOR.length; j += 1) work[i + j] ^= gf16Mul(GENERATOR[j], coefficient);
   }
 
   const codeword = new Uint8Array(RS16_N);
@@ -121,7 +118,7 @@ function trySingleError(codeword, syndromes) {
     if (magnitude === 0) continue;
     const candidate = applyError(codeword, position, magnitude);
     if (syndromesAreZero(rs16Syndromes(candidate))) {
-      return { codeword: candidate, correctedSymbols: 1, positions: [position] };
+      return { codeword: candidate, correctedSymbols: 1, positions: [position], erasuresUsed: 0 };
     }
   }
   return null;
@@ -149,14 +146,76 @@ function tryDoubleError(codeword, syndromes) {
       candidate[first] ^= e1;
       candidate[second] ^= e2;
       if (syndromesAreZero(rs16Syndromes(candidate))) {
-        return { codeword: candidate, correctedSymbols: 2, positions: [first, second] };
+        return { codeword: candidate, correctedSymbols: 2, positions: [first, second], erasuresUsed: 0 };
       }
     }
   }
   return null;
 }
 
-export function rs16Decode(codeword) {
+function solveGf16(matrix, rhs) {
+  const n = matrix.length;
+  if (n === 0) return [];
+  const a = matrix.map((row, r) => [...row, rhs[r]]);
+  for (let column = 0; column < n; column += 1) {
+    let pivot = column;
+    while (pivot < n && a[pivot][column] === 0) pivot += 1;
+    if (pivot === n) return null;
+    [a[column], a[pivot]] = [a[pivot], a[column]];
+
+    const divisor = a[column][column];
+    for (let c = column; c <= n; c += 1) a[column][c] = gf16Div(a[column][c], divisor);
+
+    for (let row = 0; row < n; row += 1) {
+      if (row === column) continue;
+      const factor = a[row][column];
+      if (factor === 0) continue;
+      for (let c = column; c <= n; c += 1) a[row][c] ^= gf16Mul(factor, a[column][c]);
+    }
+  }
+  return a.map((row) => row[n]);
+}
+
+function tryKnownErrorPositions(codeword, syndromes, positions, erasureCount = positions.length) {
+  if (!positions.length || positions.length > RS16_PARITY) return null;
+  const matrix = [];
+  const rhs = [];
+  for (let equation = 1; equation <= positions.length; equation += 1) {
+    matrix.push(positions.map((position) => {
+      const degree = RS16_N - 1 - position;
+      return gf16PowAlpha(degree * equation);
+    }));
+    rhs.push(syndromes[equation - 1]);
+  }
+  const magnitudes = solveGf16(matrix, rhs);
+  if (!magnitudes) return null;
+
+  const candidate = codeword.slice();
+  const correctedPositions = [];
+  positions.forEach((position, index) => {
+    const magnitude = magnitudes[index];
+    if (magnitude !== 0) {
+      candidate[position] ^= magnitude;
+      correctedPositions.push(position);
+    }
+  });
+  if (!syndromesAreZero(rs16Syndromes(candidate))) return null;
+  return {
+    codeword: candidate,
+    correctedSymbols: correctedPositions.length,
+    positions: correctedPositions,
+    erasuresUsed: erasureCount,
+  };
+}
+
+function sanitizeErasures(erasures) {
+  if (!Array.isArray(erasures)) return [];
+  return [...new Set(erasures)]
+    .filter((position) => Number.isInteger(position) && position >= 0 && position < RS16_N)
+    .slice(0, RS16_PARITY);
+}
+
+export function rs16Decode(codeword, options = {}) {
   if (!(codeword instanceof Uint8Array) || codeword.length !== RS16_N) {
     throw new TypeError(`RS16 codeword must be Uint8Array(${RS16_N})`);
   }
@@ -166,28 +225,36 @@ export function rs16Decode(codeword) {
 
   const syndromes = rs16Syndromes(codeword);
   if (syndromesAreZero(syndromes)) {
-    return { data: codeword.slice(0, RS16_K), correctedSymbols: 0, positions: [] };
+    return { data: codeword.slice(0, RS16_K), correctedSymbols: 0, positions: [], erasuresUsed: 0 };
+  }
+
+  const erasures = sanitizeErasures(options.erasures);
+  if (erasures.length) {
+    // First assume every optical error is among the low-confidence erasures.
+    const erasureOnly = tryKnownErrorPositions(codeword, syndromes, erasures, erasures.length);
+    if (erasureOnly) {
+      return { ...erasureOnly, data: erasureOnly.codeword.slice(0, RS16_K) };
+    }
+
+    // With <=2 erasures the RS distance still permits one additional unknown
+    // error (2*1 + s <= 4). Enumerating one location is tiny for N=15.
+    if (erasures.length <= 2) {
+      for (let unknown = 0; unknown < RS16_N; unknown += 1) {
+        if (erasures.includes(unknown)) continue;
+        const mixed = tryKnownErrorPositions(codeword, syndromes, [...erasures, unknown], erasures.length);
+        if (mixed) return { ...mixed, data: mixed.codeword.slice(0, RS16_K) };
+      }
+    }
   }
 
   const single = trySingleError(codeword, syndromes);
-  if (single) {
-    return {
-      data: single.codeword.slice(0, RS16_K),
-      correctedSymbols: single.correctedSymbols,
-      positions: single.positions,
-    };
-  }
+  if (single) return { ...single, data: single.codeword.slice(0, RS16_K) };
 
   const double = tryDoubleError(codeword, syndromes);
-  if (double) {
-    return {
-      data: double.codeword.slice(0, RS16_K),
-      correctedSymbols: double.correctedSymbols,
-      positions: double.positions,
-    };
-  }
+  if (double) return { ...double, data: double.codeword.slice(0, RS16_K) };
 
   const error = new Error('RS16 codeword has more errors than RS(15,11) can correct');
   error.code = 'RS16_UNCORRECTABLE';
+  error.erasures = erasures;
   throw error;
 }
