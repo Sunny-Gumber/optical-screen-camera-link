@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Optical Screen-to-Camera Sender V1</title>
+  <title>Optical Screen-to-Camera Sender</title>
   <style>
     :root { font-family: Inter, system-ui, sans-serif; color: #172033; background: #f4f6f8; }
     * { box-sizing: border-box; }
@@ -21,17 +21,27 @@
     .stats { display: flex; flex-wrap: wrap; gap: 10px 22px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; margin-top: 12px; }
     .tag { padding: 5px 8px; border-radius: 6px; background: #edf2f7; }
     .hint { color: #5b6474; line-height: 1.5; }
+    .mode-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
     a { color: #1769aa; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Optical Sender V1</h1>
-  <p class="sub">Slow baseline: 256×256 logical ROI · 16×16 cells · C16 colour symbols · 4 bits/cell</p>
+  <h1>Optical Sender</h1>
+  <p class="sub">V1 reliable colour mode + experimental V2 shape × colour mode</p>
 
   <section class="panel">
     <label for="message"><strong>Data to transmit</strong></label>
     <textarea id="message">HELLO OPTICAL</textarea>
+
+    <div class="mode-row">
+      <label for="profile"><strong>Optical mode:</strong></label>
+      <select id="profile">
+        <option value="v1">V1 Reliable · C16 × R3 · 13-byte payload</option>
+        <option value="v2" selected>V2 Test · 8 shapes × 32 colours × R3 · 37-byte payload</option>
+      </select>
+    </div>
+
     <div>
       <button id="generate">Generate Frames</button>
       <button id="previous">Previous</button>
@@ -46,7 +56,7 @@
       <a href="../receiver-web/">Open Receiver</a>
     </div>
     <div id="stats" class="stats" aria-live="polite"></div>
-    <p class="hint">For the first physical test use 1 fps, maximize screen brightness, press <strong>Fullscreen Frame</strong>, and keep the receiving camera facing the whole bright square.</p>
+    <p class="hint"><strong>V2 first test:</strong> use 1 fps and fullscreen. Every data cell carries a 3-bit glyph plus a 5-bit colour. Three spatial copies are sent and the receiver votes shape and colour independently.</p>
   </section>
 
   <section class="panel">
