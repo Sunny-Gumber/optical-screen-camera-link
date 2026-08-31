@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  V3_G32_S4_C4_RS,
+  V3_G48_S4_C4_RS,
   V3_G64_S4_C4_RS,
+  V3_PROFILES,
   encodeV3Frame,
   decodeV3Frame,
   getV3DataCellCoordinates,
@@ -20,24 +23,40 @@ function makeBytes(length) {
   return bytes;
 }
 
-test('V3 data coordinate count matches RS interleaved capacity', () => {
+test('V3 adaptive profiles expose expected capacities', () => {
+  assert.equal(V3_G32_S4_C4_RS.dataByteCapacity, 308);
+  assert.equal(V3_G48_S4_C4_RS.dataByteCapacity, 759);
+  assert.equal(V3_G64_S4_C4_RS.dataByteCapacity, 1397);
+  assert.equal(getV3DataCellCoordinates(V3_G32_S4_C4_RS).length, 840);
+  assert.equal(getV3DataCellCoordinates(V3_G48_S4_C4_RS).length, 2070);
   assert.equal(getV3DataCellCoordinates(V3_G64_S4_C4_RS).length, 3810);
 });
 
-test('V3 round-trips a 1KB protocol-sized packet through RS frame encoding', () => {
-  const packet = makeBytes(1038);
-  const frame = encodeV3Frame(packet);
-  const decoded = decodeV3Frame(frame);
-  assert.deepEqual([...decoded.packetBytes], [...packet]);
-  assert.equal(decoded.correctedSymbols, 0);
-});
+for (const profile of V3_PROFILES) {
+  test(`${profile.id} round-trips its recommended protocol-sized packet`, () => {
+    const packetLength = Math.min(profile.maxPacketBytes, profile.recommendedProtocolPayloadBytes + 14);
+    const packet = makeBytes(packetLength);
+    const frame = encodeV3Frame(packet, profile);
+    const decoded = decodeV3Frame(frame, profile);
+    assert.deepEqual([...decoded.packetBytes], [...packet]);
+    assert.equal(decoded.correctedSymbols, 0);
+  });
+
+  test(`${profile.id} maximum packet capacity fits its RS envelope`, () => {
+    const packet = makeBytes(profile.maxPacketBytes);
+    const frame = encodeV3Frame(packet, profile);
+    const decoded = decodeV3Frame(frame, profile);
+    assert.deepEqual([...decoded.packetBytes], [...packet]);
+  });
+}
 
 test('V3 RS interleaving corrects two damaged optical cells in one codeword', () => {
-  const packet = makeBytes(600);
-  const frame = encodeV3Frame(packet);
-  const coordinates = getV3DataCellCoordinates(V3_G64_S4_C4_RS);
+  const profile = V3_G32_S4_C4_RS;
+  const packet = makeBytes(220);
+  const frame = encodeV3Frame(packet, profile);
+  const coordinates = getV3DataCellCoordinates(profile);
   const block = 5;
-  const physicalIndexes = [block, V3_G64_S4_C4_RS.rsCodewordCount + block];
+  const physicalIndexes = [block, profile.rsCodewordCount + block];
 
   for (const [errorIndex, physicalIndex] of physicalIndexes.entries()) {
     const { x, y } = coordinates[physicalIndex];
@@ -47,14 +66,7 @@ test('V3 RS interleaving corrects two damaged optical cells in one codeword', ()
     Object.assign(cell, { value: damaged, ...parts });
   }
 
-  const decoded = decodeV3Frame(frame);
+  const decoded = decodeV3Frame(frame, profile);
   assert.deepEqual([...decoded.packetBytes], [...packet]);
   assert.ok(decoded.correctedSymbols >= 2);
-});
-
-test('V3 maximum packet capacity fits the fixed RS envelope', () => {
-  const packet = makeBytes(V3_G64_S4_C4_RS.maxPacketBytes);
-  const frame = encodeV3Frame(packet);
-  const decoded = decodeV3Frame(frame);
-  assert.deepEqual([...decoded.packetBytes], [...packet]);
 });
