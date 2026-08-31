@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Optical Screen-to-Camera Receiver V1.4</title>
+  <title>Optical Screen-to-Camera Receiver V2</title>
   <style>
     :root {
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -49,10 +49,10 @@
     .pill[data-kind="good"] { background: #103322; border-color: #1d6f49; color: #b9f5d8; }
     .pill[data-kind="bad"] { background: #3a171a; border-color: #7b2a31; color: #ffc5ca; }
     .pill[data-kind="working"] { background: #2d2810; border-color: #665b20; color: #fff0a6; }
-    .metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 8px; margin-top: 12px; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); gap: 8px; margin-top: 12px; }
     .metric { padding: 10px; border-radius: 10px; background: #0d141d; border: 1px solid #202c3c; }
     .metric span { display: block; color: #8897aa; font-size: 12px; }
-    .metric strong { display: block; margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .metric strong { display: block; margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; word-break: break-word; }
     #output {
       white-space: pre-wrap;
       word-break: break-word;
@@ -88,8 +88,8 @@
 </head>
 <body>
 <main>
-  <h1>Optical Receiver V1.4</h1>
-  <p class="sub">Automatic 4-locator detection → perspective correction → C16 calibration → CRC → transfer reassembly</p>
+  <h1>Optical Receiver V2</h1>
+  <p class="sub">Automatic locator alignment · auto V1/V2 detection · C16 fallback · S8×C32 shape+colour decoding · R3 correction</p>
 
   <div class="toolbar">
     <button id="startCamera">Start Camera</button>
@@ -117,7 +117,7 @@
 
     <div id="cameraError" hidden></div>
 
-    <p class="hint"><strong class="important">Automatic mode:</strong> refresh both Sender and Receiver so the sender shows the new four black/white locator blocks in its outer white border. Start the camera and keep the complete optical square visible. The receiver finds all four locators automatically, corrects tilt/perspective, then decodes the colour data. No corner tapping is required.</p>
+    <p class="hint"><strong class="important">V2 test:</strong> choose <strong>V2 Test · 8 shapes × 32 colours × R3</strong> on the sender, use <strong>1 fps</strong>, then fullscreen the frame. Keep all four outer locator blocks visible. The receiver automatically detects the V2 profile, learns 8 live shape templates and 32 live colour references, then votes three spatial copies independently for shape and colour.</p>
   </section>
 
   <section class="panel">
