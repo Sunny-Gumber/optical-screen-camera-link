@@ -1,6 +1,11 @@
 import { decodePacket, FRAME_TYPE_NAMES, PacketError, TransferReassembler } from '../../packages/protocol/src/index.js';
 import { decodeRectifiedRoi } from './decoder.js';
 import {
+  describeCameraError,
+  listVideoInputs,
+  openCameraWithFallback,
+} from './camera.js';
+import {
   drawGuideOverlay,
   drawVideoFrame,
   extractLogicalRoi,
@@ -15,6 +20,9 @@ const roiCanvas = document.querySelector('#roiCanvas');
 const startButton = document.querySelector('#startCamera');
 const stopButton = document.querySelector('#stopCamera');
 const resetButton = document.querySelector('#resetTransfer');
+const refreshCamerasButton = document.querySelector('#refreshCameras');
+const cameraSelect = document.querySelector('#cameraSelect');
+const cameraError = document.querySelector('#cameraError');
 const toggleDebug = document.querySelector('#toggleDebug');
 const cameraState = document.querySelector('#cameraState');
 const lockState = document.querySelector('#lockState');
@@ -63,6 +71,20 @@ function setPill(element, text, kind = 'neutral') {
   element.dataset.kind = kind;
 }
 
+function showCameraError(info = null) {
+  if (!info) {
+    cameraError.hidden = true;
+    cameraError.innerHTML = '';
+    return;
+  }
+  cameraError.hidden = false;
+  cameraError.innerHTML = `
+    <strong>${info.title}</strong>
+    <span>${info.detail}</span>
+    <code>${info.technical}</code>
+  `;
+}
+
 function packetKey(packet) {
   return `${packet.sessionId}:${packet.frameType}:${packet.sequence}`;
 }
@@ -105,33 +127,75 @@ function resetTransfer(reason = 'manual reset') {
   renderMetrics();
 }
 
+async function refreshCameraList(preferredDeviceId = '') {
+  try {
+    const devices = await listVideoInputs(navigator.mediaDevices);
+    const previous = preferredDeviceId || cameraSelect.value;
+    cameraSelect.innerHTML = '';
+
+    if (!devices.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No camera detected';
+      cameraSelect.append(option);
+      cameraSelect.disabled = true;
+      return;
+    }
+
+    devices.forEach((device, index) => {
+      const option = document.createElement('option');
+      option.value = device.deviceId;
+      option.textContent = device.label || `Camera ${index + 1}`;
+      cameraSelect.append(option);
+    });
+
+    cameraSelect.disabled = false;
+    if (previous && devices.some((device) => device.deviceId === previous)) {
+      cameraSelect.value = previous;
+    }
+  } catch (error) {
+    log(`Unable to list cameras: ${error.message}`);
+  }
+}
+
 async function startCamera() {
   if (running) return;
   startButton.disabled = true;
+  showCameraError(null);
   setPill(cameraState, 'Requesting camera…', 'working');
   setPill(lockState, 'Preparing guide…', 'working');
 
   try {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('Camera API is unavailable. Open this page over HTTPS in a modern browser.');
+    if (!window.isSecureContext) {
+      const error = new Error('This page is not in a secure context');
+      error.name = 'SecurityError';
+      throw error;
     }
 
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+    const selectedDeviceId = cameraSelect.value || '';
+    const opened = await openCameraWithFallback(
+      navigator.mediaDevices,
+      selectedDeviceId,
+      (label) => {
+        setPill(cameraState, `Trying ${label}…`, 'working');
+        log(`Trying camera mode: ${label}`);
       },
-    });
+    );
 
+    stream = opened.stream;
     video.srcObject = stream;
     await video.play();
+
     running = true;
     stopButton.disabled = false;
+    const track = stream.getVideoTracks()[0];
+    const settings = track?.getSettings?.() || {};
+    await refreshCameraList(settings.deviceId || selectedDeviceId);
+
     setPill(cameraState, `${video.videoWidth}×${video.videoHeight} active`, 'good');
     setPill(lockState, 'Align frame', 'working');
-    log('Camera started without OpenCV. Align the sender outer white square with the yellow guide.');
+    showCameraError(null);
+    log(`Camera started using ${opened.attempt}. Align the sender outer white square with the yellow guide.`);
     scheduleLoop(0);
   } catch (error) {
     if (stream) {
@@ -140,10 +204,14 @@ async function startCamera() {
     }
     video.srcObject = null;
     startButton.disabled = false;
-    setPill(cameraState, 'Camera failed', 'bad');
+    stopButton.disabled = true;
+
+    const info = describeCameraError(error);
+    setPill(cameraState, info.title, 'bad');
     setPill(lockState, 'No frame');
-    metrics.lastError = error.message;
-    log(`Camera start failed: ${error.message}`);
+    metrics.lastError = info.technical;
+    showCameraError(info);
+    log(`Camera start failed: ${info.technical}`);
     renderMetrics();
   }
 }
@@ -192,7 +260,6 @@ function handleValidPacket(packetBytes, opticalResult) {
     return decoded;
   }
 
-  // A valid packet from a new session means the sender started a fresh transfer.
   if (receiver.sessionId !== null && decoded.sessionId !== receiver.sessionId) {
     receiver.reset();
     seenPackets.clear();
@@ -241,7 +308,6 @@ async function processFrame() {
     drawVideoFrame(video, sourceCanvas);
 
     const guide = getCenteredGuideRect(sourceCanvas.width, sourceCanvas.height);
-    // Copy the unannotated pixels first; draw the guide only after cropping.
     rectifyGuide(sourceCanvas, rectifiedCanvas, guide);
     extractLogicalRoi(rectifiedCanvas, roiCanvas);
     metrics.opticalDecodeAttempts += 1;
@@ -281,9 +347,19 @@ async function processFrame() {
 startButton.addEventListener('click', startCamera);
 stopButton.addEventListener('click', stopCamera);
 resetButton.addEventListener('click', () => resetTransfer());
+refreshCamerasButton.addEventListener('click', () => refreshCameraList());
+cameraSelect.addEventListener('change', () => {
+  if (running) {
+    stopCamera();
+    startCamera();
+  }
+});
 toggleDebug.addEventListener('change', () => {
   debugPanel.hidden = !toggleDebug.checked;
 });
 
+navigator.mediaDevices?.addEventListener?.('devicechange', () => refreshCameraList());
 window.addEventListener('beforeunload', stopCamera);
+
 resetTransfer('initial state');
+refreshCameraList();
