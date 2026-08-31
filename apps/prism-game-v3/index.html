@@ -4,40 +4,79 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#07111f" />
-    <title>Prism Lab V3 — Stage 1 Reflection Engine</title>
+    <title>Prism Lab V3 — Stage 2 Refraction & Dispersion</title>
   </head>
   <body>
     <main class="app-shell">
       <header class="hero">
         <div>
           <p class="eyebrow">PRISM LAB V3 · PHYSICS CORE</p>
-          <h1>Reflection Engine</h1>
-          <p class="lede">Stage 1 test scene: one emitter, line-segment mirrors, exact vector reflection, real-time ray tracing.</p>
+          <h1>Refraction & Dispersion</h1>
+          <p class="lede">Stage 2 diagnostic scene: Snell's law, glass medium tracking, total internal reflection, and wavelength-dependent Cauchy dispersion.</p>
         </div>
         <div class="metrics" aria-live="polite">
           <div><span>Segments</span><strong id="segmentCount">0</strong></div>
-          <div><span>Bounces</span><strong id="bounceCount">0</strong></div>
+          <div><span>Interactions</span><strong id="interactionCount">0</strong></div>
+          <div><span>Spectrum</span><strong id="spectralCount">0</strong></div>
           <div><span>Frame</span><strong id="frameCost">0 ms</strong></div>
         </div>
       </header>
 
       <section class="stage-card">
-        <canvas id="stage" width="1200" height="720" aria-label="Reflection engine test scene"></canvas>
+        <div class="canvas-wrap">
+          <canvas id="stage" width="1200" height="720" aria-label="Refraction and prism dispersion diagnostic scene"></canvas>
+          <div class="drag-hint">Drag the glass body · rotate with the control panel</div>
+        </div>
+
         <aside class="controls">
+          <h2>QA preset</h2>
+          <select id="preset">
+            <option value="prism">Prism dispersion</option>
+            <option value="slab">Flat slab / known angle</option>
+            <option value="tir">Total internal reflection</option>
+          </select>
+
           <h2>Emitter</h2>
-          <label>Angle <output id="angleReadout">-8°</output></label>
-          <input id="angle" type="range" min="-35" max="35" value="-8" step="1" />
+          <label>Angle <output id="angleReadout">0.0°</output></label>
+          <input id="angle" type="range" min="-70" max="70" value="0" step="0.5" />
+          <label class="stacked-label" for="wavelength">Light</label>
+          <select id="wavelength">
+            <option value="white">White (400–700 nm on entry)</option>
+            <option value="450">450 nm blue</option>
+            <option value="550">550 nm green</option>
+            <option value="650">650 nm red</option>
+          </select>
+
+          <h2>Refractor</h2>
+          <label>Rotation <output id="rotationReadout">0.0°</output></label>
+          <input id="rotation" type="range" min="-80" max="80" value="0" step="0.25" />
+          <label>n at 589 nm <output id="nBaseReadout">1.520</output></label>
+          <input id="nBase" type="range" min="1.30" max="1.80" value="1.52" step="0.001" />
+          <label>Dispersion B <output id="dispersionReadout">4200 nm²</output></label>
+          <input id="dispersion" type="range" min="0" max="8000" value="4200" step="50" />
+          <label>Spectral samples <output id="samplesReadout">31</output></label>
+          <input id="samples" type="range" min="5" max="41" value="31" step="2" />
 
           <h2>Diagnostics</h2>
-          <label class="toggle"><input id="showNormals" type="checkbox" checked /> Show mirror normals</label>
-          <label class="toggle"><input id="showHitDots" type="checkbox" checked /> Show hit points</label>
+          <label class="toggle"><input id="showNormals" type="checkbox" checked /> Show surface normals</label>
+          <label class="toggle"><input id="showHitDots" type="checkbox" checked /> Show boundary hits</label>
+          <label class="toggle"><input id="showLabels" type="checkbox" checked /> Show angle labels</label>
 
-          <button id="reset" type="button">Reset scene</button>
+          <button id="reset" type="button">Reset current preset</button>
 
           <section class="law-card">
-            <span>Law of reflection</span>
-            <strong>θᵢ = θᵣ</strong>
-            <p>The engine reflects the direction vector around the mirror normal; it does not use hand-authored bounce paths.</p>
+            <span id="boundaryMode">No boundary hit</span>
+            <div class="readout-grid">
+              <div><small>θ incidence</small><strong id="incidenceValue">—</strong></div>
+              <div><small>θ transmitted</small><strong id="refractionValue">—</strong></div>
+              <div><small>n₁ → n₂</small><strong id="indexValue">—</strong></div>
+            </div>
+            <p>All values are produced by the physics module. Canvas only draws the returned segments and diagnostics.</p>
+          </section>
+
+          <section class="formula-card">
+            <strong>n₁ sin θ₁ = n₂ sin θ₂</strong>
+            <span>n(λ) = A + B / λ²</span>
           </section>
         </aside>
       </section>
