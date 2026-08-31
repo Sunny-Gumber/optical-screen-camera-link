@@ -40,8 +40,8 @@
 </head>
 <body>
 <main>
-  <h1>Optical Receiver V3</h1>
-  <p class="sub">64×64 high-density grid · native-resolution data warp · local fiducial tracking · timing-phase correction · S4×C4 modulation · RS(15,11)</p>
+  <h1>Optical Receiver V3 Adaptive</h1>
+  <p class="sub">Auto 32×32 / 48×48 / 64×64 density detection · native-resolution data warp · local fiducial tracking · timing-phase correction · S4×C4 modulation · RS(15,11)</p>
 
   <div class="toolbar">
     <button id="startCamera">Start Camera</button>
@@ -65,7 +65,7 @@
       <span id="transferState" class="pill">Waiting</span>
     </div>
     <div id="cameraError" hidden></div>
-    <p class="hint"><strong class="important">First V3 test:</strong> Sender → V3 Recommended, 1 fps, Fullscreen. Keep the whole four-marker frame visible. Aim for <strong>8+ camera pixels/cell</strong>; the receiver shows this live. V3 initially uses ~1 KB DATA chunks even though the format can carry more.</p>
+    <p class="hint"><strong class="important">Next test:</strong> choose <strong>V3 Robust · 32×32</strong> on the sender, use <strong>1 fps</strong> and Fullscreen. The receiver detects the density automatically. At the same distance that gave ~8 px/cell on 64×64, 32×32 should give roughly <strong>16 px/cell</strong>. Only move to 48×48 after Robust is decoding reliably.</p>
   </section>
 
   <section class="panel">
