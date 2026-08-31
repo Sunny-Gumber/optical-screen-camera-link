@@ -31,29 +31,15 @@ function visualMaps(variant = 0) {
   };
 }
 
-function displayedC16Index(logicalIndex, maps) {
-  return maps.c16[logicalIndex] ?? logicalIndex;
-}
-function displayedC32Index(logicalIndex, maps) {
-  return maps.c32[logicalIndex] ?? logicalIndex;
-}
-function displayedC8Index(logicalIndex, maps) {
-  return maps.c8[logicalIndex] ?? logicalIndex;
-}
-function displayedB4Index(logicalIndex, maps) {
-  return maps.b4[logicalIndex] ?? logicalIndex;
-}
-function displayedShapeId(logicalId, maps) {
-  return maps.s8[logicalId] ?? logicalId;
-}
+function displayedC16Index(logicalIndex, maps) { return maps.c16[logicalIndex] ?? logicalIndex; }
+function displayedC32Index(logicalIndex, maps) { return maps.c32[logicalIndex] ?? logicalIndex; }
+function displayedC8Index(logicalIndex, maps) { return maps.c8[logicalIndex] ?? logicalIndex; }
+function displayedB4Index(logicalIndex, maps) { return maps.b4[logicalIndex] ?? logicalIndex; }
+function displayedShapeId(logicalId, maps) { return maps.s8[logicalId] ?? logicalId; }
 
 function fillForCell(cell, maps) {
-  if (cell.kind === 'finder' || cell.kind === 'profile-signature') {
-    return cell.dark ? '#000000' : '#FFFFFF';
-  }
-  if (cell.kind === 'calibration' || cell.kind === 'data') {
-    return rgbToCss(getC16Color(cell.symbol).rgb);
-  }
+  if (cell.kind === 'finder' || cell.kind === 'profile-signature') return cell.dark ? '#000000' : '#FFFFFF';
+  if (cell.kind === 'calibration' || cell.kind === 'data') return rgbToCss(getC16Color(cell.symbol).rgb);
   if (cell.kind === 'color-calibration-16' || cell.kind === 's8c16-data') {
     return rgbToCss(getC16Color(displayedC16Index(cell.colorIndex, maps)).rgb);
   }
@@ -66,7 +52,7 @@ function fillForCell(cell, maps) {
   if (cell.kind === 'background-calibration-4' || cell.kind === 's8c8b4-data') {
     return rgbToCss8(getB4Background(displayedB4Index(cell.backgroundIndex, maps)).rgb);
   }
-  if (cell.kind === 'shape-calibration') return '#A8A8A8';
+  if (cell.kind === 'shape-calibration' || cell.kind === 'shape-calibration-22') return '#A8A8A8';
   return '#E8E8E8';
 }
 
@@ -83,26 +69,19 @@ function renderFiducial(center) {
 
 function glyphFill(cell, maps) {
   if (cell.kind === 'shape-calibration') return '#000000';
-  if (cell.kind === 's8c8b4-data') {
-    return rgbToCss8(getC8Color(displayedC8Index(cell.colorIndex, maps)).rgb);
-  }
+  if (cell.kind === 'shape-calibration-22') return rgbToCss8(getC8Color(4).rgb);
+  if (cell.kind === 's8c8b4-data') return rgbToCss8(getC8Color(displayedC8Index(cell.colorIndex, maps)).rgb);
   let rgb;
-  if (cell.kind === 's8c16-data') {
-    rgb = getC16Color(displayedC16Index(cell.colorIndex, maps)).rgb;
-  } else {
-    rgb = getC32Color(displayedC32Index(cell.colorIndex, maps)).rgb;
-  }
+  if (cell.kind === 's8c16-data') rgb = getC16Color(displayedC16Index(cell.colorIndex, maps)).rgb;
+  else rgb = getC32Color(displayedC32Index(cell.colorIndex, maps)).rgb;
   return relativeLuminance(rgb) >= 145 ? '#050505' : '#FFFFFF';
 }
 
-function renderV22Halo(shape, cell, x, y, cellSize, maps) {
+function renderHalo(shape, x, y, cellSize, haloFill) {
   const module = cellSize / 8;
   const glyphSize = module * 5;
   const offset = (cellSize - glyphSize) / 2;
-  const backgroundRgb = getB4Background(displayedB4Index(cell.backgroundIndex, maps)).rgb;
-  const haloFill = luminance8(backgroundRgb) >= 128 ? '#050505' : '#FFFFFF';
   const dilated = new Set();
-
   shape.mask.forEach((row, gy) => {
     [...row].forEach((bit, gx) => {
       if (bit !== '1') return;
@@ -116,7 +95,6 @@ function renderV22Halo(shape, cell, x, y, cellSize, maps) {
       }
     });
   });
-
   return [...dilated].map((key) => {
     const [gx, gy] = key.split(',').map(Number);
     return `<rect x="${x + offset + (gx * module)}" y="${y + offset + (gy * module)}" width="${module}" height="${module}" fill="${haloFill}"/>`;
@@ -124,7 +102,7 @@ function renderV22Halo(shape, cell, x, y, cellSize, maps) {
 }
 
 function renderGlyph(cell, x, y, cellSize, maps) {
-  if (!['shape-calibration', 's8c16-data', 's8c32-data', 's8c8b4-data'].includes(cell.kind)) return '';
+  if (!['shape-calibration', 'shape-calibration-22', 's8c16-data', 's8c32-data', 's8c8b4-data'].includes(cell.kind)) return '';
   const shape = getS8Shape(displayedShapeId(cell.shapeId, maps));
   const module = cellSize / 8;
   const glyphSize = module * 5;
@@ -132,14 +110,17 @@ function renderGlyph(cell, x, y, cellSize, maps) {
   const fill = glyphFill(cell, maps);
   const parts = [];
 
-  if (cell.kind === 's8c8b4-data') parts.push(renderV22Halo(shape, cell, x, y, cellSize, maps));
+  if (cell.kind === 's8c8b4-data') {
+    const backgroundRgb = getB4Background(displayedB4Index(cell.backgroundIndex, maps)).rgb;
+    parts.push(renderHalo(shape, x, y, cellSize, luminance8(backgroundRgb) >= 128 ? '#050505' : '#FFFFFF'));
+  } else if (cell.kind === 'shape-calibration-22') {
+    parts.push(renderHalo(shape, x, y, cellSize, '#050505'));
+  }
 
   shape.mask.forEach((row, gy) => {
     [...row].forEach((bit, gx) => {
       if (bit !== '1') return;
-      parts.push(
-        `<rect x="${x + offset + (gx * module)}" y="${y + offset + (gy * module)}" width="${module}" height="${module}" fill="${fill}"/>`,
-      );
+      parts.push(`<rect x="${x + offset + (gx * module)}" y="${y + offset + (gy * module)}" width="${module}" height="${module}" fill="${fill}"/>`);
     });
   });
   return parts.join('');
@@ -164,7 +145,6 @@ export function renderOpticalFrameSvg(frame, options = {}) {
   ];
 
   for (const center of getV1FiducialCenters(total, quietZone)) parts.push(renderFiducial(center));
-
   for (const row of frame.cells) {
     for (const cell of row) {
       const x = quietZone + (cell.x * frame.cellSize);
@@ -173,7 +153,6 @@ export function renderOpticalFrameSvg(frame, options = {}) {
       parts.push(renderGlyph(cell, x, y, frame.cellSize, maps));
     }
   }
-
   parts.push('</svg>');
   return parts.join('');
 }
