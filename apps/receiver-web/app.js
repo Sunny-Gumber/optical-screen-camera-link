@@ -1,11 +1,11 @@
 import { decodePacket, FRAME_TYPE_NAMES, PacketError, TransferReassembler } from '../../packages/protocol/src/index.js';
 import { decodeRectifiedRoi } from './decoder.js';
 import {
-  detectAndRectify,
-  drawQuadOverlay,
+  drawGuideOverlay,
   drawVideoFrame,
   extractLogicalRoi,
-  waitForOpenCv,
+  getCenteredGuideRect,
+  rectifyGuide,
 } from './vision.js';
 
 const video = document.querySelector('#camera');
@@ -26,7 +26,6 @@ const logHost = document.querySelector('#log');
 const debugPanel = document.querySelector('#debugPanel');
 
 let stream = null;
-let cv = null;
 let running = false;
 let loopTimer = null;
 let receiver = new TransferReassembler();
@@ -76,8 +75,8 @@ function renderMetrics() {
     : 0;
 
   const values = [
-    ['Capture frames', metrics.captureFrames],
-    ['ROI locks', metrics.roiLocks],
+    ['Camera samples', metrics.captureFrames],
+    ['Valid frame locks', metrics.roiLocks],
     ['Optical decodes', metrics.opticalDecodes],
     ['Packet CRC fails', metrics.packetCrcFailures],
     ['Unique packets', metrics.acceptedUniquePackets],
@@ -101,6 +100,7 @@ function resetTransfer(reason = 'manual reset') {
   output.textContent = 'Waiting for a complete transfer…';
   setPill(packetState, 'No packet yet');
   setPill(transferState, 'Waiting');
+  setPill(lockState, running ? 'Align frame' : 'No frame');
   log(`Transfer state reset (${reason}).`);
   renderMetrics();
 }
@@ -108,11 +108,13 @@ function resetTransfer(reason = 'manual reset') {
 async function startCamera() {
   if (running) return;
   startButton.disabled = true;
-  setPill(cameraState, 'Loading OpenCV…', 'working');
+  setPill(cameraState, 'Requesting camera…', 'working');
+  setPill(lockState, 'Preparing guide…', 'working');
 
   try {
-    cv = await waitForOpenCv();
-    setPill(cameraState, 'Requesting camera…', 'working');
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Camera API is unavailable. Open this page over HTTPS in a modern browser.');
+    }
 
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
@@ -128,13 +130,21 @@ async function startCamera() {
     running = true;
     stopButton.disabled = false;
     setPill(cameraState, `${video.videoWidth}×${video.videoHeight} active`, 'good');
-    log('Camera started. Point it at the sender in fullscreen mode.');
+    setPill(lockState, 'Align frame', 'working');
+    log('Camera started without OpenCV. Align the sender outer white square with the yellow guide.');
     scheduleLoop(0);
   } catch (error) {
+    if (stream) {
+      for (const track of stream.getTracks()) track.stop();
+      stream = null;
+    }
+    video.srcObject = null;
     startButton.disabled = false;
     setPill(cameraState, 'Camera failed', 'bad');
+    setPill(lockState, 'No frame');
     metrics.lastError = error.message;
     log(`Camera start failed: ${error.message}`);
+    renderMetrics();
   }
 }
 
@@ -150,11 +160,13 @@ function stopCamera() {
   startButton.disabled = false;
   stopButton.disabled = true;
   setPill(cameraState, 'Stopped');
-  setPill(lockState, 'No ROI');
+  setPill(lockState, 'No frame');
   log('Camera stopped.');
 }
 
-function scheduleLoop(delay = 180) {
+// About four processing attempts per second is enough for the 0.5–2 fps sender
+// and keeps CPU use low on ordinary phones.
+function scheduleLoop(delay = 240) {
   if (!running) return;
   loopTimer = setTimeout(processFrame, delay);
 }
@@ -173,22 +185,19 @@ function handleValidPacket(packetBytes, opticalResult) {
     throw error;
   }
 
-  // A valid packet from a different session always starts a fresh transfer,
-  // even if the previous transfer had already completed.
-  if (receiver.sessionId !== null && decoded.sessionId !== receiver.sessionId) {
-    const oldSession = receiver.sessionId;
-    receiver.reset();
-    seenPackets.clear();
-    lastCompletedSession = null;
-    output.textContent = 'Waiting for a complete transfer…';
-    log(`Detected new session ${decoded.sessionId}; session ${oldSession} cleared.`);
-  }
-
   const key = packetKey(decoded);
   if (seenPackets.has(key)) {
     metrics.duplicateOpticalFrames += 1;
     setPill(packetState, `Repeat ${FRAME_TYPE_NAMES[decoded.frameType]} #${decoded.sequence}`);
-    return;
+    return decoded;
+  }
+
+  // A valid packet from a new session means the sender started a fresh transfer.
+  if (receiver.sessionId !== null && decoded.sessionId !== receiver.sessionId) {
+    receiver.reset();
+    seenPackets.clear();
+    lastCompletedSession = null;
+    log(`Detected new session ${decoded.sessionId}; previous session cleared.`);
   }
 
   const status = receiver.addPacket(packetBytes);
@@ -217,6 +226,8 @@ function handleValidPacket(packetBytes, opticalResult) {
       'working',
     );
   }
+
+  return decoded;
 }
 
 async function processFrame() {
@@ -228,38 +239,38 @@ async function processFrame() {
   try {
     metrics.captureFrames += 1;
     drawVideoFrame(video, sourceCanvas);
-    const detection = detectAndRectify(cv, sourceCanvas, rectifiedCanvas);
 
-    if (!detection) {
-      setPill(lockState, 'Searching…', 'working');
-      metrics.lastError = 'No suitable quadrilateral';
-      renderMetrics();
-      scheduleLoop();
-      return;
-    }
-
-    metrics.roiLocks += 1;
-    setPill(lockState, 'ROI locked', 'good');
-    drawQuadOverlay(sourceCanvas, detection.quad);
+    const guide = getCenteredGuideRect(sourceCanvas.width, sourceCanvas.height);
+    // Copy the unannotated pixels first; draw the guide only after cropping.
+    rectifyGuide(sourceCanvas, rectifiedCanvas, guide);
     extractLogicalRoi(rectifiedCanvas, roiCanvas);
     metrics.opticalDecodeAttempts += 1;
 
+    let locked = false;
     try {
       const opticalResult = decodeRectifiedRoi(roiCanvas);
       metrics.opticalDecodes += 1;
       metrics.lastConfidence = opticalResult.averageConfidence;
       metrics.lastFinderSeparation = opticalResult.finderSeparation;
       metrics.lastRotation = opticalResult.rotation;
+
       handleValidPacket(opticalResult.packetBytes, opticalResult);
+      metrics.roiLocks += 1;
+      locked = true;
       metrics.lastError = '';
+      setPill(lockState, 'Frame locked', 'good');
     } catch (error) {
       metrics.lastError = error.message;
+      setPill(lockState, 'Align frame', 'working');
       if (!String(error.message).includes('CRC')) {
-        setPill(packetState, 'Optical decode rejected', 'bad');
+        setPill(packetState, 'Waiting for clean frame');
       }
     }
+
+    drawGuideOverlay(sourceCanvas, guide, locked ? 'locked' : 'align');
   } catch (error) {
     metrics.lastError = error.message;
+    setPill(lockState, 'Processing error', 'bad');
     log(`Frame processing error: ${error.message}`);
   }
 
