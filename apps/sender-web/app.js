@@ -3,9 +3,11 @@ import {
   V1_G16_C16,
   V2_S8_C32_R3,
   V21_S8_C16_R3,
+  V22_S8_C8_B4_R3,
   encodeOpticalFrame,
   encodeS8C32Frame,
   encodeS8C16Frame,
+  encodeS8C8B4Frame,
   renderOpticalFrameSvg,
 } from '../../packages/optical-codec/src/index.js';
 
@@ -24,23 +26,25 @@ let transfer = null;
 let frames = [];
 let currentIndex = 0;
 let timer = null;
-let activeProfile = V21_S8_C16_R3;
+let activeProfile = V22_S8_C8_B4_R3;
 let visualVariant = 0;
 
 function selectedProfile() {
   if (profileSelect.value === 'v1') return V1_G16_C16;
   if (profileSelect.value === 'v21') return V21_S8_C16_R3;
+  if (profileSelect.value === 'v22') return V22_S8_C8_B4_R3;
   return V2_S8_C32_R3;
 }
 
 function encoderForProfile(profile) {
+  if (profile.id === V22_S8_C8_B4_R3.id) return encodeS8C8B4Frame;
   if (profile.id === V21_S8_C16_R3.id) return encodeS8C16Frame;
   if (profile.id === V2_S8_C32_R3.id) return encodeS8C32Frame;
   return encodeOpticalFrame;
 }
 
 function isHybridProfile(profile) {
-  return profile.id === V21_S8_C16_R3.id || profile.id === V2_S8_C32_R3.id;
+  return [V22_S8_C8_B4_R3.id, V21_S8_C16_R3.id, V2_S8_C32_R3.id].includes(profile.id);
 }
 
 function stopPlayback() {
@@ -112,18 +116,9 @@ function startPlayback() {
 
 generateButton.addEventListener('click', generateFrames);
 profileSelect.addEventListener('change', generateFrames);
-previousButton.addEventListener('click', () => {
-  stopPlayback();
-  advanceFrame(-1);
-});
-nextButton.addEventListener('click', () => {
-  stopPlayback();
-  advanceFrame(1);
-});
-playButton.addEventListener('click', () => {
-  if (timer) stopPlayback();
-  else startPlayback();
-});
+previousButton.addEventListener('click', () => { stopPlayback(); advanceFrame(-1); });
+nextButton.addEventListener('click', () => { stopPlayback(); advanceFrame(1); });
+playButton.addEventListener('click', () => { if (timer) stopPlayback(); else startPlayback(); });
 rateSelect.addEventListener('change', () => {
   const wasPlaying = Boolean(timer);
   if (wasPlaying) startPlayback();
