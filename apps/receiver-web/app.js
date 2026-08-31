@@ -6,12 +6,11 @@ import {
   openCameraWithFallback,
 } from './camera.js';
 import {
-  drawCornerOverlay,
+  detectFrameFiducials,
+  drawAutoFiducialOverlay,
   drawVideoFrame,
-  eventToCanvasPoint,
   extractLogicalRoi,
-  rectifyQuad,
-  validateCornerQuad,
+  rectifyFiducials,
 } from './vision.js';
 
 const video = document.querySelector('#camera');
@@ -21,8 +20,6 @@ const roiCanvas = document.querySelector('#roiCanvas');
 const startButton = document.querySelector('#startCamera');
 const stopButton = document.querySelector('#stopCamera');
 const resetButton = document.querySelector('#resetTransfer');
-const setCornersButton = document.querySelector('#setCorners');
-const clearCornersButton = document.querySelector('#clearCorners');
 const refreshCamerasButton = document.querySelector('#refreshCameras');
 const cameraSelect = document.querySelector('#cameraSelect');
 const cameraError = document.querySelector('#cameraError');
@@ -43,21 +40,21 @@ let receiver = new TransferReassembler();
 let seenPackets = new Set();
 let lastCompletedSession = null;
 let metrics = createMetrics();
-let cornerPoints = [];
-let selectingCorners = false;
-
-const CORNER_NAMES = ['TL', 'TR', 'BR', 'BL'];
+let lastDetection = null;
+let locatorMisses = 0;
 
 function createMetrics() {
   return {
     startedAt: performance.now(),
     captureFrames: 0,
+    locatorDetections: 0,
     roiLocks: 0,
     opticalDecodeAttempts: 0,
     opticalDecodes: 0,
     packetCrcFailures: 0,
     acceptedUniquePackets: 0,
     duplicateOpticalFrames: 0,
+    lastLocatorScore: 0,
     lastConfidence: 0,
     lastFinderSeparation: 0,
     lastRotation: 0,
@@ -105,11 +102,12 @@ function renderMetrics() {
 
   const values = [
     ['Camera samples', metrics.captureFrames],
+    ['4-locator detects', metrics.locatorDetections],
     ['Valid frame locks', metrics.roiLocks],
     ['Optical decodes', metrics.opticalDecodes],
     ['Packet CRC fails', metrics.packetCrcFailures],
     ['Unique packets', metrics.acceptedUniquePackets],
-    ['Optical duplicates', metrics.duplicateOpticalFrames],
+    ['Locator score', metrics.lastLocatorScore.toFixed(1)],
     ['Finder separation', metrics.lastFinderSeparation.toFixed(1)],
     ['Avg confidence', `${(metrics.lastConfidence * 100).toFixed(1)}%`],
     ['Rotation', `${metrics.lastRotation}°`],
@@ -129,35 +127,36 @@ function resetTransfer(reason = 'manual reset') {
   output.textContent = 'Waiting for a complete transfer…';
   setPill(packetState, 'No packet yet');
   setPill(transferState, 'Waiting');
-  if (running) {
-    setPill(lockState, cornerPoints.length === 4 ? 'Corners set' : 'Set 4 corners', 'working');
-  } else {
-    setPill(lockState, 'No frame');
-  }
+  setPill(lockState, running ? 'Searching 4 locators' : 'No frame', running ? 'working' : 'neutral');
   log(`Transfer state reset (${reason}).`);
   renderMetrics();
 }
 
-function beginCornerSelection() {
-  if (!running) {
-    setPill(lockState, 'Start camera first', 'bad');
-    return;
-  }
-  cornerPoints = [];
-  selectingCorners = true;
-  setPill(lockState, 'Tap TL corner (1/4)', 'working');
-  setCornersButton.textContent = 'Selecting…';
-  clearCornersButton.disabled = false;
-  log('Corner selection started. Tap TL → TR → BR → BL on the sender outer white square.');
+function clearAutoAlignment() {
+  lastDetection = null;
+  locatorMisses = 0;
 }
 
-function clearCorners(reason = 'manual') {
-  cornerPoints = [];
-  selectingCorners = false;
-  setCornersButton.textContent = 'Set 4 Corners';
-  clearCornersButton.disabled = true;
-  if (running) setPill(lockState, 'Set 4 corners', 'working');
-  log(`Perspective corners cleared (${reason}).`);
+function averageCornerDistance(a, b) {
+  if (!a?.corners || !b?.corners) return Infinity;
+  return a.corners.reduce((sum, point, index) => {
+    const other = b.corners[index];
+    return sum + Math.hypot(point.x - other.x, point.y - other.y);
+  }, 0) / 4;
+}
+
+function smoothDetection(previous, next, canvasWidth) {
+  if (!previous) return next;
+  const movement = averageCornerDistance(previous, next);
+  if (movement > Math.max(28, canvasWidth * 0.065)) return next;
+  const alpha = 0.42;
+  return {
+    ...next,
+    corners: next.corners.map((point, index) => ({
+      x: (previous.corners[index].x * (1 - alpha)) + (point.x * alpha),
+      y: (previous.corners[index].y * (1 - alpha)) + (point.y * alpha),
+    })),
+  };
 }
 
 async function refreshCameraList(preferredDeviceId = '') {
@@ -221,15 +220,15 @@ async function startCamera() {
 
     running = true;
     stopButton.disabled = false;
-    setCornersButton.disabled = false;
     const track = stream.getVideoTracks()[0];
     const settings = track?.getSettings?.() || {};
     await refreshCameraList(settings.deviceId || selectedDeviceId);
 
+    clearAutoAlignment();
     setPill(cameraState, `${video.videoWidth}×${video.videoHeight} active`, 'good');
+    setPill(lockState, 'Searching 4 locators', 'working');
     showCameraError(null);
-    clearCorners('new camera session');
-    log(`Camera started using ${opened.attempt}. Set the four sender corners to correct perspective.`);
+    log(`Camera started using ${opened.attempt}. Automatic optical locator detection is active.`);
     scheduleLoop(0);
   } catch (error) {
     if (stream) {
@@ -239,7 +238,6 @@ async function startCamera() {
     video.srcObject = null;
     startButton.disabled = false;
     stopButton.disabled = true;
-    setCornersButton.disabled = true;
 
     const info = describeCameraError(error);
     setPill(cameraState, info.title, 'bad');
@@ -260,16 +258,17 @@ function stopCamera() {
   }
   stream = null;
   video.srcObject = null;
+  clearAutoAlignment();
   startButton.disabled = false;
   stopButton.disabled = true;
-  setCornersButton.disabled = true;
-  clearCorners('camera stopped');
   setPill(cameraState, 'Stopped');
   setPill(lockState, 'No frame');
   log('Camera stopped.');
 }
 
-function scheduleLoop(delay = 240) {
+// V1.4 does locator detection plus a perspective warp in plain JavaScript.
+// Roughly 3 processing attempts/second keeps ordinary phones responsive.
+function scheduleLoop(delay = 320) {
   if (!running) return;
   loopTimer = setTimeout(processFrame, delay);
 }
@@ -341,14 +340,27 @@ async function processFrame() {
     metrics.captureFrames += 1;
     drawVideoFrame(video, sourceCanvas);
 
-    if (cornerPoints.length !== 4 || !validateCornerQuad(cornerPoints)) {
-      drawCornerOverlay(sourceCanvas, cornerPoints, 'selecting');
+    const detection = detectFrameFiducials(sourceCanvas);
+    if (detection) {
+      lastDetection = smoothDetection(lastDetection, detection, sourceCanvas.width);
+      locatorMisses = 0;
+      metrics.locatorDetections += 1;
+      metrics.lastLocatorScore = detection.score;
+    } else {
+      locatorMisses += 1;
+      // Keep a recent lock briefly: the sender data changes, but locator geometry does not.
+      if (locatorMisses > 5) lastDetection = null;
+    }
+
+    if (!lastDetection) {
+      setPill(lockState, 'Searching 4 locators', 'working');
+      drawAutoFiducialOverlay(sourceCanvas, null, 'searching');
       renderMetrics();
       scheduleLoop();
       return;
     }
 
-    rectifyQuad(sourceCanvas, rectifiedCanvas, cornerPoints);
+    rectifyFiducials(sourceCanvas, rectifiedCanvas, lastDetection.corners);
     extractLogicalRoi(rectifiedCanvas, roiCanvas);
     metrics.opticalDecodeAttempts += 1;
 
@@ -364,19 +376,19 @@ async function processFrame() {
       metrics.roiLocks += 1;
       decodedOk = true;
       metrics.lastError = '';
-      setPill(lockState, 'Perspective locked', 'good');
+      setPill(lockState, 'Auto aligned', 'good');
     } catch (error) {
       metrics.lastError = error.message;
-      setPill(lockState, 'Corners set · refining', 'working');
+      setPill(lockState, '4 locators found · decoding', 'working');
       if (!String(error.message).includes('CRC')) {
         setPill(packetState, 'Waiting for clean frame');
       }
     }
 
-    drawCornerOverlay(sourceCanvas, cornerPoints, decodedOk ? 'decoded' : 'locked');
+    drawAutoFiducialOverlay(sourceCanvas, lastDetection, decodedOk ? 'decoded' : 'found');
   } catch (error) {
     metrics.lastError = error.message;
-    setPill(lockState, 'Perspective error', 'bad');
+    setPill(lockState, 'Auto-align error', 'bad');
     log(`Frame processing error: ${error.message}`);
   }
 
@@ -384,35 +396,9 @@ async function processFrame() {
   scheduleLoop();
 }
 
-sourceCanvas.addEventListener('pointerdown', (event) => {
-  if (!running || !selectingCorners) return;
-  event.preventDefault();
-  const point = eventToCanvasPoint(sourceCanvas, event);
-  cornerPoints.push(point);
-  const index = cornerPoints.length - 1;
-  log(`${CORNER_NAMES[index]} corner set at ${Math.round(point.x)},${Math.round(point.y)}.`);
-
-  if (cornerPoints.length === 4) {
-    selectingCorners = false;
-    setCornersButton.textContent = 'Set 4 Corners Again';
-    if (validateCornerQuad(cornerPoints)) {
-      setPill(lockState, '4 corners set', 'working');
-      log('Perspective quadrilateral accepted. Keep the camera and sender steady.');
-    } else {
-      setPill(lockState, 'Invalid corners · retry', 'bad');
-      log('Selected quadrilateral is invalid or too small. Please set the corners again.');
-    }
-  } else {
-    const next = CORNER_NAMES[cornerPoints.length];
-    setPill(lockState, `Tap ${next} corner (${cornerPoints.length + 1}/4)`, 'working');
-  }
-});
-
 startButton.addEventListener('click', startCamera);
 stopButton.addEventListener('click', stopCamera);
 resetButton.addEventListener('click', () => resetTransfer());
-setCornersButton.addEventListener('click', beginCornerSelection);
-clearCornersButton.addEventListener('click', () => clearCorners());
 refreshCamerasButton.addEventListener('click', () => refreshCameraList());
 cameraSelect.addEventListener('change', () => {
   if (running) {
