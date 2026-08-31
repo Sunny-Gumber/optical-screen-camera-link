@@ -1,11 +1,14 @@
 import { createTransferPackets } from '../../packages/protocol/src/index.js';
 import {
   V1_G16_C16,
+  V2_S8_C32_R3,
   encodeOpticalFrame,
+  encodeS8C32Frame,
   renderOpticalFrameSvg,
 } from '../../packages/optical-codec/src/index.js';
 
 const message = document.querySelector('#message');
+const profileSelect = document.querySelector('#profile');
 const frameHost = document.querySelector('#frameHost');
 const stats = document.querySelector('#stats');
 const generateButton = document.querySelector('#generate');
@@ -19,6 +22,15 @@ let transfer = null;
 let frames = [];
 let currentIndex = 0;
 let timer = null;
+let activeProfile = V2_S8_C32_R3;
+
+function selectedProfile() {
+  return profileSelect.value === 'v1' ? V1_G16_C16 : V2_S8_C32_R3;
+}
+
+function encoderForProfile(profile) {
+  return profile.id === V2_S8_C32_R3.id ? encodeS8C32Frame : encodeOpticalFrame;
+}
 
 function stopPlayback() {
   if (timer) clearInterval(timer);
@@ -47,7 +59,7 @@ function renderCurrentFrame() {
 
   const inputBytes = new TextEncoder().encode(message.value).length;
   stats.innerHTML = [
-    `Profile: ${V1_G16_C16.id}`,
+    `Profile: ${activeProfile.id}`,
     `Input: ${inputBytes} bytes`,
     `Frame: ${currentIndex + 1}/${frames.length}`,
     `Session: ${transfer.sessionId}`,
@@ -59,10 +71,12 @@ function renderCurrentFrame() {
 
 function generateFrames() {
   stopPlayback();
+  activeProfile = selectedProfile();
+  const encodeFrame = encoderForProfile(activeProfile);
   transfer = createTransferPackets(message.value, {
-    chunkSize: V1_G16_C16.recommendedProtocolPayloadBytes,
+    chunkSize: activeProfile.recommendedProtocolPayloadBytes,
   });
-  frames = transfer.packets.map((packet) => encodeOpticalFrame(packet));
+  frames = transfer.packets.map((packet) => encodeFrame(packet, activeProfile));
   currentIndex = 0;
   renderCurrentFrame();
 }
@@ -79,6 +93,7 @@ function startPlayback() {
 }
 
 generateButton.addEventListener('click', generateFrames);
+profileSelect.addEventListener('change', generateFrames);
 previousButton.addEventListener('click', () => {
   stopPlayback();
   if (!frames.length) return;
