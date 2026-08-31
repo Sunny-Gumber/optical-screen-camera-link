@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Optical Screen-to-Camera Receiver V2</title>
+  <title>Optical Screen-to-Camera Receiver V2.1</title>
   <style>
     :root {
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -16,36 +16,16 @@
     h1 { margin: 0 0 6px; font-size: clamp(24px, 5vw, 38px); }
     .sub { color: #9aa8bb; margin: 0 0 18px; }
     .toolbar, .status-row, .camera-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    button, label.toggle, select {
-      border: 1px solid #2d3a4d;
-      background: #172131;
-      color: #f2f6fb;
-      border-radius: 10px;
-      padding: 10px 14px;
-      font: inherit;
-    }
+    button, label.toggle, select { border: 1px solid #2d3a4d; background: #172131; color: #f2f6fb; border-radius: 10px; padding: 10px 14px; font: inherit; }
     select { min-width: min(320px, 100%); }
     button { cursor: pointer; }
     button:disabled, select:disabled { opacity: .45; cursor: not-allowed; }
     label.toggle { display: inline-flex; gap: 8px; align-items: center; }
-    .panel {
-      margin-top: 14px;
-      border: 1px solid #263246;
-      background: #111923;
-      border-radius: 14px;
-      padding: 14px;
-    }
+    .panel { margin-top: 14px; border: 1px solid #263246; background: #111923; border-radius: 14px; padding: 14px; }
     .camera-wrap { position: relative; overflow: hidden; border-radius: 12px; background: #05070a; }
     #camera { display: none; }
     #sourceCanvas { width: 100%; height: auto; display: block; background: #05070a; }
-    .pill {
-      padding: 7px 10px;
-      border-radius: 999px;
-      background: #1d2735;
-      color: #c8d3e2;
-      font-size: 13px;
-      border: 1px solid #334157;
-    }
+    .pill { padding: 7px 10px; border-radius: 999px; background: #1d2735; color: #c8d3e2; font-size: 13px; border: 1px solid #334157; }
     .pill[data-kind="good"] { background: #103322; border-color: #1d6f49; color: #b9f5d8; }
     .pill[data-kind="bad"] { background: #3a171a; border-color: #7b2a31; color: #ffc5ca; }
     .pill[data-kind="working"] { background: #2d2810; border-color: #665b20; color: #fff0a6; }
@@ -53,26 +33,8 @@
     .metric { padding: 10px; border-radius: 10px; background: #0d141d; border: 1px solid #202c3c; }
     .metric span { display: block; color: #8897aa; font-size: 12px; }
     .metric strong { display: block; margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; word-break: break-word; }
-    #output {
-      white-space: pre-wrap;
-      word-break: break-word;
-      min-height: 80px;
-      padding: 12px;
-      border-radius: 10px;
-      background: #080d13;
-      border: 1px solid #202c3c;
-      color: #eaf3ff;
-    }
-    #cameraError {
-      margin-top: 12px;
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid #7b2a31;
-      background: #32171a;
-      color: #ffd7da;
-      display: grid;
-      gap: 5px;
-    }
+    #output { white-space: pre-wrap; word-break: break-word; min-height: 80px; padding: 12px; border-radius: 10px; background: #080d13; border: 1px solid #202c3c; color: #eaf3ff; }
+    #cameraError { margin-top: 12px; padding: 12px; border-radius: 10px; border: 1px solid #7b2a31; background: #32171a; color: #ffd7da; display: grid; gap: 5px; }
     #cameraError[hidden] { display: none; }
     #cameraError strong { color: #ffffff; }
     #cameraError span { line-height: 1.45; }
@@ -88,8 +50,8 @@
 </head>
 <body>
 <main>
-  <h1>Optical Receiver V2</h1>
-  <p class="sub">Automatic locator alignment · auto V1/V2 detection · C16 fallback · S8×C32 shape+colour decoding · R3 correction</p>
+  <h1>Optical Receiver V2.1</h1>
+  <p class="sub">Auto V1 / V2.1 S8×C16 / V2 S8×C32 detection · stable 4-locator lock · R3 component correction</p>
 
   <div class="toolbar">
     <button id="startCamera">Start Camera</button>
@@ -102,9 +64,7 @@
   <section class="panel">
     <div class="camera-controls">
       <label for="cameraSelect"><strong>Camera:</strong></label>
-      <select id="cameraSelect" disabled>
-        <option value="">Camera permission required</option>
-      </select>
+      <select id="cameraSelect" disabled><option value="">Camera permission required</option></select>
       <button id="refreshCameras" type="button">Refresh Cameras</button>
     </div>
 
@@ -114,10 +74,8 @@
       <span id="packetState" class="pill">No packet yet</span>
       <span id="transferState" class="pill">Waiting</span>
     </div>
-
     <div id="cameraError" hidden></div>
-
-    <p class="hint"><strong class="important">V2 test:</strong> choose <strong>V2 Test · 8 shapes × 32 colours × R3</strong> on the sender, use <strong>1 fps</strong>, then fullscreen the frame. Keep all four outer locator blocks visible. The receiver automatically detects the V2 profile, learns 8 live shape templates and 32 live colour references, then votes three spatial copies independently for shape and colour.</p>
+    <p class="hint"><strong class="important">Recommended long-stream test:</strong> choose <strong>V2.1 Robust · 8 shapes × 16 colours × R3</strong> on the sender at <strong>1 fps</strong>. The receiver auto-detects the profile. Hybrid retransmissions deliberately change the physical shape/colour mapping each cycle while the calibration cells define the mapping again, helping packets escape repeatable optical errors.</p>
   </section>
 
   <section class="panel">
@@ -136,14 +94,8 @@
   <section id="debugPanel" class="panel" hidden>
     <h2>Debug views</h2>
     <div class="debug-grid">
-      <div>
-        <h3>Auto perspective result · 304×304</h3>
-        <canvas id="rectifiedCanvas" width="304" height="304"></canvas>
-      </div>
-      <div>
-        <h3>Logical 256×256 ROI</h3>
-        <canvas id="roiCanvas" width="256" height="256"></canvas>
-      </div>
+      <div><h3>Auto perspective result · 304×304</h3><canvas id="rectifiedCanvas" width="304" height="304"></canvas></div>
+      <div><h3>Logical 256×256 ROI</h3><canvas id="roiCanvas" width="256" height="256"></canvas></div>
     </div>
   </section>
 
