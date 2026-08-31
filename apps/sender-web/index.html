@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Optical Screen-to-Camera Sender V1</title>
+  <style>
+    :root { font-family: Inter, system-ui, sans-serif; color: #172033; background: #f4f6f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; }
+    main { max-width: 1100px; margin: 0 auto; }
+    h1 { margin-bottom: 6px; }
+    .sub { color: #5b6474; margin-top: 0; }
+    .panel { background: white; border: 1px solid #dfe4ea; border-radius: 14px; padding: 18px; margin: 16px 0; }
+    textarea { width: 100%; min-height: 100px; padding: 12px; font: inherit; }
+    button { padding: 10px 14px; margin: 8px 6px 0 0; cursor: pointer; }
+    #frameHost { display: grid; place-items: center; overflow: auto; background: #20242c; min-height: 360px; padding: 18px; border-radius: 10px; }
+    #frameHost svg { max-width: min(90vw, 650px); height: auto; }
+    .stats { display: flex; flex-wrap: wrap; gap: 10px 22px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; }
+    .tag { padding: 5px 8px; border-radius: 6px; background: #edf2f7; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Optical Sender V1</h1>
+  <p class="sub">Slow baseline: 256×256 logical ROI · 16×16 cells · C16 colour symbols · 4 bits/cell</p>
+
+  <section class="panel">
+    <label for="message"><strong>Data to transmit</strong></label>
+    <textarea id="message">HELLO OPTICAL</textarea>
+    <div>
+      <button id="generate">Generate Frames</button>
+      <button id="previous">Previous</button>
+      <button id="next">Next</button>
+      <button id="play">Play at 1 fps</button>
+    </div>
+    <div id="stats" class="stats" aria-live="polite"></div>
+  </section>
+
+  <section class="panel">
+    <div id="frameHost"></div>
+  </section>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
