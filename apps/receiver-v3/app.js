@@ -1,5 +1,5 @@
 import { decodePacket, FRAME_TYPE_NAMES, PacketError, TransferReassembler } from '../../packages/protocol/src/index.js';
-import { V3_G64_S4_C4_RS } from '../../packages/optical-codec/src/profiles.js';
+import { V3_G32_S4_C4_RS, V3_PROFILES } from '../../packages/optical-codec/src/profiles.js';
 import { describeCameraError, listVideoInputs, openCameraWithFallback } from '../receiver-web/camera.js';
 import { drawVideoFrame, drawAutoFiducialOverlay, extractLogicalRoi, rectifyFiducials } from '../receiver-web/vision.js';
 import { estimateV3CameraPixelsPerCell, rectifyV3LogicalRoi, trackOrAcquireV3Fiducials } from './vision-v3.js';
@@ -33,6 +33,7 @@ let loopTimer = null;
 let lastDetection = null;
 let detectorMisses = 0;
 let coarseMisses = 0;
+let activeProfile = null;
 let receiver = new TransferReassembler();
 let seenPackets = new Set();
 let lastCompletedSession = null;
@@ -40,6 +41,7 @@ let metrics = createMetrics();
 
 function createMetrics() {
   return {
+    profileId: activeProfile?.id ?? 'Auto-detecting V3',
     captureFrames: 0,
     globalAcquires: 0,
     trackedFrames: 0,
@@ -116,7 +118,7 @@ function renderMetrics() {
     usefulBps = Math.round((status.totalBytes * 8) / seconds);
   }
   const values = [
-    ['Profile', V3_G64_S4_C4_RS.id],
+    ['Profile', metrics.profileId],
     ['Camera samples', metrics.captureFrames],
     ['Global acquires', metrics.globalAcquires],
     ['Locally tracked', metrics.trackedFrames],
@@ -152,6 +154,7 @@ function resetTransfer(reason = 'manual reset') {
   seenPackets = new Set();
   lastCompletedSession = null;
   const preserved = {
+    profileId: metrics.profileId,
     captureFrames: metrics.captureFrames,
     globalAcquires: metrics.globalAcquires,
     trackedFrames: metrics.trackedFrames,
@@ -164,6 +167,33 @@ function resetTransfer(reason = 'manual reset') {
   setPill(transferState, 'Waiting');
   log(`Transfer reset (${reason}).`);
   renderMetrics();
+}
+
+function switchProfile(profile) {
+  if (!profile || activeProfile?.id === profile.id) return;
+  const previous = activeProfile?.id ?? 'none';
+  activeProfile = profile;
+  metrics.profileId = profile.id;
+  receiver = new TransferReassembler();
+  seenPackets.clear();
+  lastCompletedSession = null;
+  metrics.firstAcceptedAt = null;
+  metrics.completedAt = null;
+  output.textContent = 'Waiting for a complete V3 transfer…';
+  setPill(transferState, 'Waiting');
+  log(`V3 density lock: ${previous} → ${profile.id}`);
+}
+
+function probeAdaptiveProfile(canvas) {
+  const profiles = activeProfile
+    ? [activeProfile, ...V3_PROFILES.filter((profile) => profile.id !== activeProfile.id)]
+    : V3_PROFILES;
+  const results = profiles.map((profile) => ({ ...detectV3Coarse(canvas, profile), profile }));
+  const current = activeProfile ? results.find((result) => result.profile.id === activeProfile.id) : null;
+  if (current?.isV3) return current;
+  const valid = results.filter((result) => result.isV3).sort((a, b) => b.score - a.score);
+  if (valid.length) return valid[0];
+  return results.sort((a, b) => b.score - a.score)[0];
 }
 
 async function refreshCameraList(preferredDeviceId = '') {
@@ -217,7 +247,7 @@ async function startCamera() {
     coarseMisses = 0;
     setPill(cameraState, `${video.videoWidth}×${video.videoHeight} active`, 'good');
     setPill(trackingState, 'Acquiring 4 locators', 'working');
-    log(`V3 camera started via ${opened.attempt}; native-resolution decoding enabled.`);
+    log(`V3 camera started via ${opened.attempt}; adaptive native-resolution decoding enabled.`);
     scheduleLoop(0);
   } catch (error) {
     if (stream) for (const track of stream.getTracks()) track.stop();
@@ -336,32 +366,37 @@ async function processFrame() {
 
     rectifyFiducials(sourceCanvas, coarseRectified, detection.corners);
     extractLogicalRoi(coarseRectified, coarseRoi);
-    const probe = detectV3Coarse(coarseRoi);
-    if (!probe.isV3) {
+    const probe = probeAdaptiveProfile(coarseRoi);
+    if (!probe?.isV3) {
       coarseMisses += 1;
       if (coarseMisses >= 3) lastDetection = null;
-      setPill(decodeState, 'V3 timing/signature not clean', 'working');
+      setPill(decodeState, 'V3 density/signature not clean', 'working');
       drawAutoFiducialOverlay(sourceCanvas, detection, 'found');
-      metrics.rotation = probe.rotation;
-      metrics.timingSeparation = probe.timingSeparation;
-      metrics.signatureSeparation = probe.signatureSeparation;
+      if (probe) {
+        metrics.rotation = probe.rotation;
+        metrics.timingSeparation = probe.timingSeparation;
+        metrics.signatureSeparation = probe.signatureSeparation;
+      }
       renderMetrics();
       scheduleLoop();
       return;
     }
 
+    switchProfile(probe.profile);
+    const profile = activeProfile ?? V3_G32_S4_C4_RS;
     coarseMisses = 0;
     metrics.coarseLocks += 1;
+    metrics.profileId = profile.id;
     metrics.rotation = probe.rotation;
-    metrics.pixelsPerCell = estimateV3CameraPixelsPerCell(video, sourceCanvas, detection);
-    if (metrics.pixelsPerCell < 7) setPill(trackingState, `Move closer · ${metrics.pixelsPerCell.toFixed(1)} px/cell`, 'working');
+    metrics.pixelsPerCell = estimateV3CameraPixelsPerCell(video, sourceCanvas, detection, profile);
+    if (metrics.pixelsPerCell < 8) setPill(trackingState, `Move closer · ${metrics.pixelsPerCell.toFixed(1)} px/cell`, 'working');
 
-    rectifyV3LogicalRoi(video, sourceCanvas, detection, highSourceCanvas, v3Roi);
+    rectifyV3LogicalRoi(video, sourceCanvas, detection, highSourceCanvas, v3Roi, profile);
     metrics.opticalAttempts += 1;
 
     let decodedOk = false;
     try {
-      const optical = decodeV3Roi(v3Roi, probe.rotation);
+      const optical = decodeV3Roi(v3Roi, probe.rotation, profile);
       metrics.opticalDecodes += 1;
       applyV3Diagnostics(optical);
       metrics.lastRsCorrected = optical.correctedSymbols;
@@ -380,6 +415,7 @@ async function processFrame() {
         metrics.rsRejects += 1;
         metrics.lastRsFailedBlock = error.blockIndex ?? 'unknown';
         metrics.lastRsErasures = error.erasurePositions?.length ?? 0;
+        metrics.totalRsErasures += error.erasurePositions?.length ?? 0;
         setPill(decodeState, `RS block ${error.blockIndex ?? '?'} uncorrectable`, 'bad');
       } else if (error instanceof PacketError) {
         setPill(decodeState, error.code === 'CRC_MISMATCH' ? 'Protocol CRC rejected' : `${error.code} rejected`, 'bad');
