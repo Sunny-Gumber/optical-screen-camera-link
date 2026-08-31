@@ -15,9 +15,9 @@
     textarea { width: 100%; min-height: 100px; padding: 12px; font: inherit; }
     button, select { padding: 10px 14px; margin: 8px 6px 0 0; cursor: pointer; font: inherit; }
     #frameHost { display: grid; place-items: center; overflow: auto; background: #05070a; min-height: 390px; padding: 24px; border-radius: 10px; }
-    #frameHost svg { width: min(86vw, 700px); height: auto; max-height: 86vh; }
-    #frameHost:fullscreen { width: 100vw; height: 100vh; padding: 20px; background: #000; }
-    #frameHost:fullscreen svg { width: min(92vw, 92vh); max-width: none; max-height: 92vh; }
+    #frameHost svg { width: min(90vw, 900px); height: auto; max-height: 88vh; }
+    #frameHost:fullscreen { width: 100vw; height: 100vh; padding: 12px; background: #000; }
+    #frameHost:fullscreen svg { width: min(96vw, 96vh); max-width: none; max-height: 96vh; }
     .stats { display: flex; flex-wrap: wrap; gap: 10px 22px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; margin-top: 12px; }
     .tag { padding: 5px 8px; border-radius: 6px; background: #edf2f7; }
     .hint { color: #5b6474; line-height: 1.5; }
@@ -28,18 +28,19 @@
 <body>
 <main>
   <h1>Optical Sender</h1>
-  <p class="sub">Reliable baseline + adaptive shape/colour/background optical modes</p>
+  <p class="sub">V3 high-density optical modem + legacy reliability experiments</p>
 
   <section class="panel">
     <label for="message"><strong>Data to transmit</strong></label>
-    <textarea id="message">HELLO OPTICAL</textarea>
+    <textarea id="message">V3 HIGH DENSITY OPTICAL TEST</textarea>
 
     <div class="mode-row">
       <label for="profile"><strong>Optical mode:</strong></label>
       <select id="profile">
+        <option value="v3" selected>V3 Recommended · 64×64 · 4 shapes × 4 colours · RS(15,11) · 1024-byte payload</option>
         <option value="v1">V1 Reliable · C16 × R3 · 13-byte payload</option>
         <option value="v21">V2.1 Robust · 8 shapes × 16 colours × R3 · 34-byte payload</option>
-        <option value="v22" selected>V2.2 Recommended · 8 shapes × 8 colours × 4 backgrounds × R3 · 42-byte payload</option>
+        <option value="v22">V2.2 Experimental · 8 shapes × 8 colours × 4 backgrounds × R3 · 42-byte payload</option>
         <option value="v2">V2 Fast Test · 8 shapes × 32 colours × R3 · 37-byte payload</option>
       </select>
     </div>
@@ -55,10 +56,12 @@
         <option value="500">2 fps</option>
       </select>
       <button id="fullscreen">Fullscreen Frame</button>
-      <a href="../receiver-web/">Open Receiver</a>
+      <a href="../receiver-v3/">Open V3 Receiver</a>
+      &nbsp;·&nbsp;
+      <a href="../receiver-web/">Open Legacy Receiver</a>
     </div>
     <div id="stats" class="stats" aria-live="polite"></div>
-    <p class="hint"><strong>Recommended now:</strong> V2.2 at 1 fps. Each logical cell carries one full byte: 3 shape bits + 3 foreground-colour bits + 2 calibrated neutral-background bits. Three spatial copies are still used for reliability, and every retransmission changes the physical codebook while live calibration preserves the logical value.</p>
+    <p class="hint"><strong>V3 strategy:</strong> stop trying to pack many states into a small number of cells. V3 uses a 64×64 grid, only four colours and four very strong shapes, timing tracks around the whole grid, and RS(15,11) correction across interleaved 4-bit symbols. Start at <strong>1 fps</strong> and fullscreen the optical frame.</p>
   </section>
 
   <section class="panel">
