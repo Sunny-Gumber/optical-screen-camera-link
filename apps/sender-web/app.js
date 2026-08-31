@@ -12,6 +12,8 @@ const generateButton = document.querySelector('#generate');
 const previousButton = document.querySelector('#previous');
 const nextButton = document.querySelector('#next');
 const playButton = document.querySelector('#play');
+const rateSelect = document.querySelector('#rate');
+const fullscreenButton = document.querySelector('#fullscreen');
 
 let transfer = null;
 let frames = [];
@@ -21,7 +23,12 @@ let timer = null;
 function stopPlayback() {
   if (timer) clearInterval(timer);
   timer = null;
-  playButton.textContent = 'Play at 1 fps';
+  playButton.textContent = 'Play';
+}
+
+function currentRateLabel() {
+  const option = rateSelect.options[rateSelect.selectedIndex];
+  return option?.textContent ?? '1 fps';
 }
 
 function renderCurrentFrame() {
@@ -33,6 +40,8 @@ function renderCurrentFrame() {
 
   frameHost.innerHTML = renderOpticalFrameSvg(frames[currentIndex], {
     scale: 2,
+    quietZone: 24,
+    borderWidth: 4,
     showGrid: false,
   });
 
@@ -44,6 +53,7 @@ function renderCurrentFrame() {
     `Session: ${transfer.sessionId}`,
     `DATA packets: ${transfer.dataPacketCount}`,
     `Chunk: ${transfer.chunkSize} bytes`,
+    `Rate: ${currentRateLabel()}`,
   ].map((value) => `<span class="tag">${value}</span>`).join('');
 }
 
@@ -55,6 +65,17 @@ function generateFrames() {
   frames = transfer.packets.map((packet) => encodeOpticalFrame(packet));
   currentIndex = 0;
   renderCurrentFrame();
+}
+
+function startPlayback() {
+  if (!frames.length) generateFrames();
+  stopPlayback();
+  playButton.textContent = 'Stop';
+  const interval = Number(rateSelect.value) || 1000;
+  timer = setInterval(() => {
+    currentIndex = (currentIndex + 1) % frames.length;
+    renderCurrentFrame();
+  }, interval);
 }
 
 generateButton.addEventListener('click', generateFrames);
@@ -71,16 +92,25 @@ nextButton.addEventListener('click', () => {
   renderCurrentFrame();
 });
 playButton.addEventListener('click', () => {
-  if (!frames.length) generateFrames();
-  if (timer) {
-    stopPlayback();
-    return;
+  if (timer) stopPlayback();
+  else startPlayback();
+});
+rateSelect.addEventListener('change', () => {
+  const wasPlaying = Boolean(timer);
+  if (wasPlaying) startPlayback();
+  else renderCurrentFrame();
+});
+fullscreenButton.addEventListener('click', async () => {
+  try {
+    if (!document.fullscreenElement) await frameHost.requestFullscreen();
+    else await document.exitFullscreen();
+  } catch (error) {
+    console.error('Fullscreen failed', error);
   }
-  playButton.textContent = 'Stop';
-  timer = setInterval(() => {
-    currentIndex = (currentIndex + 1) % frames.length;
-    renderCurrentFrame();
-  }, 1000);
+});
+
+document.addEventListener('fullscreenchange', () => {
+  fullscreenButton.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen Frame';
 });
 
 generateFrames();
