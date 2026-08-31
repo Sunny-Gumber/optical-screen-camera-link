@@ -9,10 +9,6 @@ export const V1_G16_C16 = Object.freeze({
   dataRowEnd: 13,
   bitsPerSymbol: 4,
   symbolCount: 16,
-
-  // V1.5 reliability mode: every logical C16 symbol is transmitted three
-  // times in spatially separated regions of the frame. 58 logical symbols
-  // become 174 physical symbols, leaving two data-row cells unused.
   repetition: 3,
   dataSymbolCapacity: 58,
   encodedSymbolCapacity: 174,
@@ -29,24 +25,17 @@ export const V2_S8_C32_R3 = Object.freeze({
   logicalSize: 256,
   cellSize: 16,
   gridSize: 16,
-
-  // Row 0 contains eight live shape references; row 1 contains a profile
-  // signature; rows 2-3 contain all 32 live colour references.
   shapeCalibrationRow: 0,
   shapeCalibrationStartX: 3,
   profileSignatureRow: 1,
   profileSignatureStartX: 5,
   profileSignatureBits: Object.freeze([1, 0, 1, 0, 0, 1]),
   colorCalibrationRows: Object.freeze([2, 3]),
-
   dataRowStart: 4,
   dataRowEnd: 13,
   shapeCount: 8,
   colorCount: 32,
   bitsPerPhysicalCell: 8,
-
-  // 160 physical data cells. Three spatially separated copies carry each
-  // logical byte, leaving one spare cell. Shape and colour vote separately.
   repetition: 3,
   physicalDataCellCapacity: 160,
   dataByteCapacity: 53,
@@ -54,6 +43,37 @@ export const V2_S8_C32_R3 = Object.freeze({
   lengthPrefixBytes: 2,
   maxPacketBytes: 51,
   recommendedProtocolPayloadBytes: 37,
+});
+
+// Reliability-first hybrid profile. 8 shapes provide 3 bits and 16 colours
+// provide 4 bits, so each logical symbol carries 7 bits. Only one colour
+// calibration row is required, allowing row 3 to become payload again.
+export const V21_S8_C16_R3 = Object.freeze({
+  id: 'V2.1-S8-C16-R3',
+  modulation: 'S8C16-R3',
+  logicalSize: 256,
+  cellSize: 16,
+  gridSize: 16,
+  shapeCalibrationRow: 0,
+  shapeCalibrationStartX: 3,
+  profileSignatureRow: 1,
+  profileSignatureStartX: 5,
+  profileSignatureBits: Object.freeze([1, 1, 0, 1, 0, 0]),
+  colorCalibrationRows: Object.freeze([2]),
+  dataRowStart: 3,
+  dataRowEnd: 13,
+  shapeCount: 8,
+  colorCount: 16,
+  bitsPerPhysicalCell: 7,
+  repetition: 3,
+  physicalDataCellCapacity: 176,
+  logicalSymbolCapacity: 58,
+  encodedSymbolCapacity: 174,
+  dataBitCapacity: 406,
+  dataByteCapacity: 50,
+  lengthPrefixBytes: 2,
+  maxPacketBytes: 48,
+  recommendedProtocolPayloadBytes: 34,
 });
 
 export function getDataCellCoordinates(profile = V1_G16_C16) {
