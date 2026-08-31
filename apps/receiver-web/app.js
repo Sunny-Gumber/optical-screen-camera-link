@@ -1,5 +1,6 @@
 import { decodePacket, FRAME_TYPE_NAMES, PacketError, TransferReassembler } from '../../packages/protocol/src/index.js';
 import { decodeRectifiedRoi } from './decoder.js';
+import { decodeS8C32Roi, detectV2Profile } from './v2-decoder.js';
 import {
   describeCameraError,
   listVideoInputs,
@@ -46,18 +47,26 @@ let locatorMisses = 0;
 function createMetrics() {
   return {
     startedAt: performance.now(),
+    firstAcceptedAt: null,
+    completedAt: null,
     captureFrames: 0,
     locatorDetections: 0,
     roiLocks: 0,
     opticalDecodeAttempts: 0,
     opticalDecodes: 0,
-    packetCrcFailures: 0,
+    packetRejects: 0,
+    crcRejects: 0,
     acceptedUniquePackets: 0,
     duplicateOpticalFrames: 0,
     lastLocatorScore: 0,
     lastConfidence: 0,
     lastFinderSeparation: 0,
     lastRotation: 0,
+    lastProfile: '—',
+    shapeCorrections: 0,
+    colorCorrections: 0,
+    shapeUncorrectable: 0,
+    colorUncorrectable: 0,
     lastError: '',
   };
 }
@@ -94,22 +103,30 @@ function packetKey(packet) {
 }
 
 function renderMetrics() {
-  const elapsedSeconds = Math.max(0.001, (performance.now() - metrics.startedAt) / 1000);
   const status = receiver.status();
-  const usefulBps = status.complete && status.totalBytes !== null
-    ? Math.round((status.totalBytes * 8) / elapsedSeconds)
-    : 0;
+  let usefulBps = 0;
+  if (status.complete && status.totalBytes !== null && metrics.firstAcceptedAt !== null) {
+    const end = metrics.completedAt ?? performance.now();
+    const activeSeconds = Math.max(0.001, (end - metrics.firstAcceptedAt) / 1000);
+    usefulBps = Math.round((status.totalBytes * 8) / activeSeconds);
+  }
 
   const values = [
+    ['Profile', metrics.lastProfile],
     ['Camera samples', metrics.captureFrames],
     ['4-locator detects', metrics.locatorDetections],
     ['Valid frame locks', metrics.roiLocks],
     ['Optical decodes', metrics.opticalDecodes],
-    ['Packet CRC fails', metrics.packetCrcFailures],
+    ['Packet rejects', metrics.packetRejects],
+    ['CRC rejects', metrics.crcRejects],
     ['Unique packets', metrics.acceptedUniquePackets],
     ['Locator score', metrics.lastLocatorScore.toFixed(1)],
     ['Finder separation', metrics.lastFinderSeparation.toFixed(1)],
     ['Avg confidence', `${(metrics.lastConfidence * 100).toFixed(1)}%`],
+    ['Shape corrections', metrics.shapeCorrections],
+    ['Colour corrections', metrics.colorCorrections],
+    ['Shape uncertain', metrics.shapeUncorrectable],
+    ['Colour uncertain', metrics.colorUncorrectable],
     ['Rotation', `${metrics.lastRotation}°`],
     ['Useful rate', usefulBps ? `${usefulBps} bps` : '—'],
   ];
@@ -228,7 +245,7 @@ async function startCamera() {
     setPill(cameraState, `${video.videoWidth}×${video.videoHeight} active`, 'good');
     setPill(lockState, 'Searching 4 locators', 'working');
     showCameraError(null);
-    log(`Camera started using ${opened.attempt}. Automatic optical locator detection is active.`);
+    log(`Camera started using ${opened.attempt}. Automatic V1/V2 optical detection is active.`);
     scheduleLoop(0);
   } catch (error) {
     if (stream) {
@@ -266,8 +283,6 @@ function stopCamera() {
   log('Camera stopped.');
 }
 
-// V1.4 does locator detection plus a perspective warp in plain JavaScript.
-// Roughly 3 processing attempts/second keeps ordinary phones responsive.
 function scheduleLoop(delay = 320) {
   if (!running) return;
   loopTimer = setTimeout(processFrame, delay);
@@ -278,9 +293,12 @@ function handleValidPacket(packetBytes, opticalResult) {
   try {
     decoded = decodePacket(packetBytes);
   } catch (error) {
-    metrics.packetCrcFailures += 1;
+    metrics.packetRejects += 1;
     if (error instanceof PacketError && error.code === 'CRC_MISMATCH') {
+      metrics.crcRejects += 1;
       setPill(packetState, 'CRC rejected', 'bad');
+    } else if (error instanceof PacketError) {
+      setPill(packetState, `${error.code} rejected`, 'bad');
     } else {
       setPill(packetState, 'Invalid packet', 'bad');
     }
@@ -298,9 +316,12 @@ function handleValidPacket(packetBytes, opticalResult) {
     receiver.reset();
     seenPackets.clear();
     lastCompletedSession = null;
+    metrics.firstAcceptedAt = null;
+    metrics.completedAt = null;
     log(`Detected new session ${decoded.sessionId}; previous session cleared.`);
   }
 
+  if (metrics.firstAcceptedAt === null) metrics.firstAcceptedAt = performance.now();
   const status = receiver.addPacket(packetBytes);
   seenPackets.add(key);
   metrics.acceptedUniquePackets += 1;
@@ -313,10 +334,11 @@ function handleValidPacket(packetBytes, opticalResult) {
   if (status.complete) {
     if (lastCompletedSession !== status.sessionId) {
       lastCompletedSession = status.sessionId;
+      metrics.completedAt = performance.now();
       const data = receiver.getData();
       output.textContent = receiver.getText();
       setPill(transferState, `Complete · ${data.length} bytes`, 'good');
-      log(`Transfer ${status.sessionId} complete: ${data.length} bytes recovered.`);
+      log(`Transfer ${status.sessionId} complete: ${data.length} bytes recovered with ${metrics.lastProfile}.`);
     }
   } else {
     const expected = status.expectedDataPackets === null ? '?' : status.expectedDataPackets;
@@ -328,6 +350,13 @@ function handleValidPacket(packetBytes, opticalResult) {
   }
 
   return decoded;
+}
+
+function decodeCurrentOpticalFrame() {
+  const probe = detectV2Profile(roiCanvas);
+  if (probe.isV2) return decodeS8C32Roi(roiCanvas);
+  const result = decodeRectifiedRoi(roiCanvas);
+  return { ...result, profileId: 'V1-G16-C16-R3' };
 }
 
 async function processFrame() {
@@ -348,7 +377,6 @@ async function processFrame() {
       metrics.lastLocatorScore = detection.score;
     } else {
       locatorMisses += 1;
-      // Keep a recent lock briefly: the sender data changes, but locator geometry does not.
       if (locatorMisses > 5) lastDetection = null;
     }
 
@@ -366,17 +394,22 @@ async function processFrame() {
 
     let decodedOk = false;
     try {
-      const opticalResult = decodeRectifiedRoi(roiCanvas);
+      const opticalResult = decodeCurrentOpticalFrame();
       metrics.opticalDecodes += 1;
+      metrics.lastProfile = opticalResult.profileId;
       metrics.lastConfidence = opticalResult.averageConfidence;
       metrics.lastFinderSeparation = opticalResult.finderSeparation;
       metrics.lastRotation = opticalResult.rotation;
+      metrics.shapeCorrections = opticalResult.shapeCorrections ?? 0;
+      metrics.colorCorrections = opticalResult.colorCorrections ?? 0;
+      metrics.shapeUncorrectable = opticalResult.shapeUncorrectable ?? 0;
+      metrics.colorUncorrectable = opticalResult.colorUncorrectable ?? 0;
 
       handleValidPacket(opticalResult.packetBytes, opticalResult);
       metrics.roiLocks += 1;
       decodedOk = true;
       metrics.lastError = '';
-      setPill(lockState, 'Auto aligned', 'good');
+      setPill(lockState, `Auto aligned · ${opticalResult.profileId}`, 'good');
     } catch (error) {
       metrics.lastError = error.message;
       setPill(lockState, '4 locators found · decoding', 'working');
