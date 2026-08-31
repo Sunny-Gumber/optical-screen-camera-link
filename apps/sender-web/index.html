@@ -28,7 +28,7 @@
 <body>
 <main>
   <h1>Optical Sender</h1>
-  <p class="sub">Reliable baseline + hybrid shape/colour modes with live calibration and retransmission diversity</p>
+  <p class="sub">Reliable baseline + adaptive shape/colour/background optical modes</p>
 
   <section class="panel">
     <label for="message"><strong>Data to transmit</strong></label>
@@ -38,7 +38,8 @@
       <label for="profile"><strong>Optical mode:</strong></label>
       <select id="profile">
         <option value="v1">V1 Reliable · C16 × R3 · 13-byte payload</option>
-        <option value="v21" selected>V2.1 Robust · 8 shapes × 16 colours × R3 · 34-byte payload</option>
+        <option value="v21">V2.1 Robust · 8 shapes × 16 colours × R3 · 34-byte payload</option>
+        <option value="v22" selected>V2.2 Recommended · 8 shapes × 8 colours × 4 backgrounds × R3 · 42-byte payload</option>
         <option value="v2">V2 Fast Test · 8 shapes × 32 colours × R3 · 37-byte payload</option>
       </select>
     </div>
@@ -57,7 +58,7 @@
       <a href="../receiver-web/">Open Receiver</a>
     </div>
     <div id="stats" class="stats" aria-live="polite"></div>
-    <p class="hint"><strong>Recommended now:</strong> V2.1 Robust at 1 fps. It keeps 8 shapes but uses the 16-colour palette already proven on the physical link. Each retransmission also changes the physical shape/colour mapping while the live calibration lets the receiver decode the same logical packet.</p>
+    <p class="hint"><strong>Recommended now:</strong> V2.2 at 1 fps. Each logical cell carries one full byte: 3 shape bits + 3 foreground-colour bits + 2 calibrated neutral-background bits. Three spatial copies are still used for reliability, and every retransmission changes the physical codebook while live calibration preserves the logical value.</p>
   </section>
 
   <section class="panel">
