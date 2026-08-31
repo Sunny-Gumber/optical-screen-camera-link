@@ -1,21 +1,8 @@
 import { decodePacket, FRAME_TYPE_NAMES, PacketError, TransferReassembler } from '../../packages/protocol/src/index.js';
 import { V3_G64_S4_C4_RS } from '../../packages/optical-codec/src/profiles.js';
-import {
-  describeCameraError,
-  listVideoInputs,
-  openCameraWithFallback,
-} from '../receiver-web/camera.js';
-import {
-  drawVideoFrame,
-  drawAutoFiducialOverlay,
-  extractLogicalRoi,
-  rectifyFiducials,
-} from '../receiver-web/vision.js';
-import {
-  estimateV3CameraPixelsPerCell,
-  rectifyV3LogicalRoi,
-  trackOrAcquireV3Fiducials,
-} from './vision-v3.js';
+import { describeCameraError, listVideoInputs, openCameraWithFallback } from '../receiver-web/camera.js';
+import { drawVideoFrame, drawAutoFiducialOverlay, extractLogicalRoi, rectifyFiducials } from '../receiver-web/vision.js';
+import { estimateV3CameraPixelsPerCell, rectifyV3LogicalRoi, trackOrAcquireV3Fiducials } from './vision-v3.js';
 import { detectV3Coarse, decodeV3Roi } from './v3-decoder.js';
 
 const video = document.querySelector('#camera');
@@ -75,7 +62,9 @@ function createMetrics() {
     shapeConfidence: 0,
     averageConfidence: 0,
     lastRsCorrected: 0,
+    lastRsErasures: 0,
     totalRsCorrected: 0,
+    totalRsErasures: 0,
     lastRsBlocks: 0,
     lastRsFailedBlock: null,
     firstAcceptedAt: null,
@@ -104,6 +93,18 @@ function showCameraError(info = null) {
   }
   cameraError.hidden = false;
   cameraError.innerHTML = `<strong>${info.title}</strong><span>${info.detail}</span><code>${info.technical}</code>`;
+}
+
+function applyV3Diagnostics(diag) {
+  if (!diag) return;
+  if (Number.isFinite(diag.timingSeparation)) metrics.timingSeparation = diag.timingSeparation;
+  if (Number.isFinite(diag.signatureSeparation)) metrics.signatureSeparation = diag.signatureSeparation;
+  if (Number.isFinite(diag.phaseX)) metrics.phaseX = diag.phaseX;
+  if (Number.isFinite(diag.phaseY)) metrics.phaseY = diag.phaseY;
+  if (Number.isFinite(diag.rotation)) metrics.rotation = diag.rotation;
+  if (Number.isFinite(diag.averageColorConfidence)) metrics.colorConfidence = diag.averageColorConfidence;
+  if (Number.isFinite(diag.averageShapeConfidence)) metrics.shapeConfidence = diag.averageShapeConfidence;
+  if (Number.isFinite(diag.averageConfidence)) metrics.averageConfidence = diag.averageConfidence;
 }
 
 function renderMetrics() {
@@ -135,15 +136,15 @@ function renderMetrics() {
     ['Colour confidence', `${(metrics.colorConfidence * 100).toFixed(1)}%`],
     ['Avg confidence', `${(metrics.averageConfidence * 100).toFixed(1)}%`],
     ['RS corrected / frame', metrics.lastRsCorrected],
+    ['RS erasures / frame', metrics.lastRsErasures],
     ['RS corrected total', metrics.totalRsCorrected],
+    ['RS erasures total', metrics.totalRsErasures],
     ['RS blocks decoded', metrics.lastRsBlocks],
     ['Failed RS block', metrics.lastRsFailedBlock ?? '—'],
     ['Rotation', `${metrics.rotation}°`],
     ['Useful rate', usefulBps ? `${usefulBps} bps` : '—'],
   ];
-  metricsHost.innerHTML = values
-    .map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`)
-    .join('');
+  metricsHost.innerHTML = values.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
 }
 
 function resetTransfer(reason = 'manual reset') {
@@ -203,11 +204,7 @@ async function startCamera() {
       throw error;
     }
     const selectedDeviceId = cameraSelect.value || '';
-    const opened = await openCameraWithFallback(
-      navigator.mediaDevices,
-      selectedDeviceId,
-      (label) => setPill(cameraState, `Trying ${label}…`, 'working'),
-    );
+    const opened = await openCameraWithFallback(navigator.mediaDevices, selectedDeviceId, (label) => setPill(cameraState, `Trying ${label}…`, 'working'));
     stream = opened.stream;
     video.srcObject = stream;
     await video.play();
@@ -289,11 +286,7 @@ function acceptProtocolPacket(packetBytes, opticalResult) {
   const status = receiver.addPacket(packetBytes);
   seenPackets.add(key);
   metrics.acceptedUniquePackets += 1;
-  setPill(
-    decodeState,
-    `${FRAME_TYPE_NAMES[decoded.frameType]} #${decoded.sequence} · RS fixed ${opticalResult.correctedSymbols}`,
-    'good',
-  );
+  setPill(decodeState, `${FRAME_TYPE_NAMES[decoded.frameType]} #${decoded.sequence} · RS fixed ${opticalResult.correctedSymbols}`, 'good');
 
   if (status.complete) {
     if (lastCompletedSession !== status.sessionId) {
@@ -341,9 +334,6 @@ async function processFrame() {
       setPill(trackingState, '4 locators acquired', 'working');
     }
 
-    // Cheap canonical 304/256 warp first. V3 geometry is exactly 3x V1, so
-    // this coarse image is enough to validate timing/signature before the
-    // expensive native-resolution warp.
     rectifyFiducials(sourceCanvas, coarseRectified, detection.corners);
     extractLogicalRoi(coarseRectified, coarseRoi);
     const probe = detectV3Coarse(coarseRoi);
@@ -364,7 +354,7 @@ async function processFrame() {
     metrics.coarseLocks += 1;
     metrics.rotation = probe.rotation;
     metrics.pixelsPerCell = estimateV3CameraPixelsPerCell(video, sourceCanvas, detection);
-    if (metrics.pixelsPerCell < 6) setPill(trackingState, `Too far · ${metrics.pixelsPerCell.toFixed(1)} px/cell`, 'working');
+    if (metrics.pixelsPerCell < 7) setPill(trackingState, `Move closer · ${metrics.pixelsPerCell.toFixed(1)} px/cell`, 'working');
 
     rectifyV3LogicalRoi(video, sourceCanvas, detection, highSourceCanvas, v3Roi);
     metrics.opticalAttempts += 1;
@@ -373,15 +363,11 @@ async function processFrame() {
     try {
       const optical = decodeV3Roi(v3Roi, probe.rotation);
       metrics.opticalDecodes += 1;
-      metrics.timingSeparation = optical.timingSeparation;
-      metrics.signatureSeparation = optical.signatureSeparation;
-      metrics.phaseX = optical.phaseX;
-      metrics.phaseY = optical.phaseY;
-      metrics.colorConfidence = optical.averageColorConfidence;
-      metrics.shapeConfidence = optical.averageShapeConfidence;
-      metrics.averageConfidence = optical.averageConfidence;
+      applyV3Diagnostics(optical);
       metrics.lastRsCorrected = optical.correctedSymbols;
+      metrics.lastRsErasures = optical.erasuresUsed ?? 0;
       metrics.totalRsCorrected += optical.correctedSymbols;
+      metrics.totalRsErasures += optical.erasuresUsed ?? 0;
       metrics.lastRsBlocks = optical.rsBlocksDecoded;
       metrics.lastRsFailedBlock = null;
       acceptProtocolPacket(optical.packetBytes, optical);
@@ -389,9 +375,11 @@ async function processFrame() {
       decodedOk = true;
     } catch (error) {
       metrics.lastError = error.message;
+      applyV3Diagnostics(error.v3Diagnostics);
       if (error.code === 'RS16_UNCORRECTABLE') {
         metrics.rsRejects += 1;
         metrics.lastRsFailedBlock = error.blockIndex ?? 'unknown';
+        metrics.lastRsErasures = error.erasurePositions?.length ?? 0;
         setPill(decodeState, `RS block ${error.blockIndex ?? '?'} uncorrectable`, 'bad');
       } else if (error instanceof PacketError) {
         setPill(decodeState, error.code === 'CRC_MISMATCH' ? 'Protocol CRC rejected' : `${error.code} rejected`, 'bad');
