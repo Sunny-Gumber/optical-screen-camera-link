@@ -133,7 +133,10 @@ function renderLegacyGlyph(cell, x, y, cellSize, maps) {
 function renderV3Glyph(cell, x, y, cellSize) {
   if (!['v3-shape-calibration', 'v3-data'].includes(cell.kind)) return '';
   const shape = getV3Shape(cell.shapeId);
-  const module = cellSize / 6;
+  const maskHeight = shape.mask.length;
+  const maskWidth = shape.mask[0].length;
+  const moduleX = cellSize / maskWidth;
+  const moduleY = cellSize / maskHeight;
   let fill = '#050505';
   if (cell.kind === 'v3-data') {
     const background = getV3Color(cell.colorIndex).rgb;
@@ -143,7 +146,7 @@ function renderV3Glyph(cell, x, y, cellSize) {
   shape.mask.forEach((row, gy) => {
     [...row].forEach((bit, gx) => {
       if (bit !== '1') return;
-      parts.push(`<rect x="${x + (gx * module)}" y="${y + (gy * module)}" width="${module}" height="${module}" fill="${fill}"/>`);
+      parts.push(`<rect x="${x + (gx * moduleX)}" y="${y + (gy * moduleY)}" width="${moduleX}" height="${moduleY}" fill="${fill}"/>`);
     });
   });
   return parts.join('');
