@@ -22,9 +22,14 @@ function seededPermutation(length, variant, salt) {
 
 function visualMaps(variant = 0) {
   return {
+    c16: seededPermutation(16, variant, 0xC016C016),
     c32: seededPermutation(32, variant, 0xC032C032),
     s8: seededPermutation(8, variant, 0x58085808),
   };
+}
+
+function displayedC16Index(logicalIndex, maps) {
+  return maps.c16[logicalIndex] ?? logicalIndex;
 }
 
 function displayedC32Index(logicalIndex, maps) {
@@ -41,6 +46,9 @@ function fillForCell(cell, maps) {
   }
   if (cell.kind === 'calibration' || cell.kind === 'data') {
     return rgbToCss(getC16Color(cell.symbol).rgb);
+  }
+  if (cell.kind === 'color-calibration-16' || cell.kind === 's8c16-data') {
+    return rgbToCss(getC16Color(displayedC16Index(cell.colorIndex, maps)).rgb);
   }
   if (cell.kind === 'color-calibration' || cell.kind === 's8c32-data') {
     return c32RgbToCss(getC32Color(displayedC32Index(cell.colorIndex, maps)).rgb);
@@ -62,12 +70,17 @@ function renderFiducial(center) {
 
 function glyphFill(cell, maps) {
   if (cell.kind === 'shape-calibration') return '#000000';
-  const rgb = getC32Color(displayedC32Index(cell.colorIndex, maps)).rgb;
+  let rgb;
+  if (cell.kind === 's8c16-data') {
+    rgb = getC16Color(displayedC16Index(cell.colorIndex, maps)).rgb;
+  } else {
+    rgb = getC32Color(displayedC32Index(cell.colorIndex, maps)).rgb;
+  }
   return relativeLuminance(rgb) >= 145 ? '#050505' : '#FFFFFF';
 }
 
 function renderGlyph(cell, x, y, cellSize, maps) {
-  if (cell.kind !== 'shape-calibration' && cell.kind !== 's8c32-data') return '';
+  if (!['shape-calibration', 's8c16-data', 's8c32-data'].includes(cell.kind)) return '';
   const shape = getS8Shape(displayedShapeId(cell.shapeId, maps));
   const module = cellSize / 8;
   const glyphSize = module * 5;
@@ -92,7 +105,8 @@ export function renderOpticalFrameSvg(frame, options = {}) {
   const showGrid = options.showGrid ?? false;
   const borderWidth = options.borderWidth ?? 4;
   const visualVariant = Number.isInteger(options.visualVariant) ? options.visualVariant : 0;
-  const maps = visualMaps(frame.version === 2 ? visualVariant : 0);
+  const hybrid = frame.version === 2 || frame.version === 21;
+  const maps = visualMaps(hybrid ? visualVariant : 0);
   const total = frame.logicalSize + (quietZone * 2);
   const displaySize = total * scale;
   const gridStroke = showGrid ? ' stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="0.5"' : '';
