@@ -13,11 +13,15 @@
     .sub { color: #5b6474; margin-top: 0; }
     .panel { background: white; border: 1px solid #dfe4ea; border-radius: 14px; padding: 18px; margin: 16px 0; }
     textarea { width: 100%; min-height: 100px; padding: 12px; font: inherit; }
-    button { padding: 10px 14px; margin: 8px 6px 0 0; cursor: pointer; }
-    #frameHost { display: grid; place-items: center; overflow: auto; background: #20242c; min-height: 360px; padding: 18px; border-radius: 10px; }
-    #frameHost svg { max-width: min(90vw, 650px); height: auto; }
-    .stats { display: flex; flex-wrap: wrap; gap: 10px 22px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; }
+    button, select { padding: 10px 14px; margin: 8px 6px 0 0; cursor: pointer; font: inherit; }
+    #frameHost { display: grid; place-items: center; overflow: auto; background: #05070a; min-height: 390px; padding: 24px; border-radius: 10px; }
+    #frameHost svg { width: min(86vw, 700px); height: auto; max-height: 86vh; }
+    #frameHost:fullscreen { width: 100vw; height: 100vh; padding: 20px; background: #000; }
+    #frameHost:fullscreen svg { width: min(92vw, 92vh); max-width: none; max-height: 92vh; }
+    .stats { display: flex; flex-wrap: wrap; gap: 10px 22px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; margin-top: 12px; }
     .tag { padding: 5px 8px; border-radius: 6px; background: #edf2f7; }
+    .hint { color: #5b6474; line-height: 1.5; }
+    a { color: #1769aa; }
   </style>
 </head>
 <body>
@@ -32,9 +36,17 @@
       <button id="generate">Generate Frames</button>
       <button id="previous">Previous</button>
       <button id="next">Next</button>
-      <button id="play">Play at 1 fps</button>
+      <button id="play">Play</button>
+      <select id="rate" aria-label="Frame rate">
+        <option value="2000">0.5 fps</option>
+        <option value="1000" selected>1 fps</option>
+        <option value="500">2 fps</option>
+      </select>
+      <button id="fullscreen">Fullscreen Frame</button>
+      <a href="../receiver-web/">Open Receiver</a>
     </div>
     <div id="stats" class="stats" aria-live="polite"></div>
+    <p class="hint">For the first physical test use 1 fps, maximize screen brightness, press <strong>Fullscreen Frame</strong>, and keep the receiving camera facing the whole bright square.</p>
   </section>
 
   <section class="panel">
