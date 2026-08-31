@@ -33,6 +33,14 @@ function placeFinder(cells, corner, x0, y0) {
   }
 }
 
+function interleaveRepeatedSymbols(symbols, repetition) {
+  const encoded = new Uint8Array(symbols.length * repetition);
+  for (let copy = 0; copy < repetition; copy += 1) {
+    encoded.set(symbols, copy * symbols.length);
+  }
+  return encoded;
+}
+
 export function encodeOpticalFrame(packetBytes, profile = V1_G16_C16) {
   if (!(packetBytes instanceof Uint8Array)) {
     throw new TypeError('encodeOpticalFrame expects packet bytes as Uint8Array');
@@ -48,9 +56,15 @@ export function encodeOpticalFrame(packetBytes, profile = V1_G16_C16) {
   view.setUint16(0, packetBytes.length, false);
   envelope.set(packetBytes, profile.lengthPrefixBytes);
 
-  const symbols = bytesToC16Symbols(envelope);
-  if (symbols.length !== profile.dataSymbolCapacity) {
-    throw new Error('Internal profile capacity mismatch');
+  const logicalSymbols = bytesToC16Symbols(envelope);
+  if (logicalSymbols.length !== profile.dataSymbolCapacity) {
+    throw new Error('Internal profile logical capacity mismatch');
+  }
+
+  const repetition = profile.repetition ?? 1;
+  const encodedSymbols = interleaveRepeatedSymbols(logicalSymbols, repetition);
+  if (encodedSymbols.length !== profile.encodedSymbolCapacity) {
+    throw new Error('Internal profile encoded capacity mismatch');
   }
 
   const cells = emptyCells(profile);
@@ -70,14 +84,19 @@ export function encodeOpticalFrame(packetBytes, profile = V1_G16_C16) {
     };
   }
 
+  // Copy 0 occupies the first logical-capacity cells, copy 1 the next set,
+  // copy 2 the final set. A local blur/moire error therefore usually damages
+  // only one copy of a logical symbol rather than all three.
   const dataCoordinates = getDataCellCoordinates(profile);
-  dataCoordinates.forEach(({ x, y }, index) => {
+  dataCoordinates.slice(0, encodedSymbols.length).forEach(({ x, y }, index) => {
     cells[y][x] = {
       x,
       y,
       kind: 'data',
-      symbol: symbols[index],
-      symbolIndex: index,
+      symbol: encodedSymbols[index],
+      encodedSymbolIndex: index,
+      logicalSymbolIndex: index % profile.dataSymbolCapacity,
+      copyIndex: Math.floor(index / profile.dataSymbolCapacity),
     };
   });
 
@@ -93,25 +112,45 @@ export function encodeOpticalFrame(packetBytes, profile = V1_G16_C16) {
 }
 
 /**
- * Ideal decoder used for codec tests before camera/image processing exists.
- * It reads already-classified symbols from the frame object.
+ * Ideal decoder used by codec tests. For ideal frames all copies are exact;
+ * majority logic is exercised in the camera decoder.
  */
 export function decodeOpticalFrame(frame, profile = V1_G16_C16) {
   if (!frame || frame.profileId !== profile.id) {
     throw new Error(`Expected optical profile ${profile.id}`);
   }
 
-  const symbols = new Uint8Array(profile.dataSymbolCapacity);
-  const dataCoordinates = getDataCellCoordinates(profile);
+  const dataCoordinates = getDataCellCoordinates(profile)
+    .slice(0, profile.encodedSymbolCapacity);
+  const encoded = new Uint8Array(profile.encodedSymbolCapacity);
+
   dataCoordinates.forEach(({ x, y }, index) => {
     const cell = frame.cells?.[y]?.[x];
     if (!cell || cell.kind !== 'data' || !Number.isInteger(cell.symbol)) {
       throw new Error(`Missing classified data symbol at cell ${x},${y}`);
     }
-    symbols[index] = cell.symbol;
+    encoded[index] = cell.symbol;
   });
 
-  const envelope = c16SymbolsToBytes(symbols);
+  const logical = new Uint8Array(profile.dataSymbolCapacity);
+  for (let i = 0; i < logical.length; i += 1) {
+    const counts = new Map();
+    for (let copy = 0; copy < profile.repetition; copy += 1) {
+      const value = encoded[i + (copy * logical.length)];
+      counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+    let bestValue = 0;
+    let bestCount = -1;
+    for (const [value, count] of counts) {
+      if (count > bestCount) {
+        bestValue = value;
+        bestCount = count;
+      }
+    }
+    logical[i] = bestValue;
+  }
+
+  const envelope = c16SymbolsToBytes(logical);
   const view = new DataView(envelope.buffer, envelope.byteOffset, envelope.byteLength);
   const packetLength = view.getUint16(0, false);
   if (packetLength > profile.maxPacketBytes) {
