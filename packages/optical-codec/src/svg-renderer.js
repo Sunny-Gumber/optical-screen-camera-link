@@ -1,11 +1,19 @@
 import { getC16Color, rgbToCss } from '../../constellation/src/c16.js';
+import { c32RgbToCss, getC32Color, relativeLuminance } from '../../constellation/src/c32.js';
 import { getV1FiducialCenters, V1_FIDUCIAL } from './fiducials.js';
+import { getS8Shape } from './shapes.js';
 
 function fillForCell(cell) {
-  if (cell.kind === 'finder') return cell.dark ? '#000000' : '#FFFFFF';
+  if (cell.kind === 'finder' || cell.kind === 'profile-signature') {
+    return cell.dark ? '#000000' : '#FFFFFF';
+  }
   if (cell.kind === 'calibration' || cell.kind === 'data') {
     return rgbToCss(getC16Color(cell.symbol).rgb);
   }
+  if (cell.kind === 'color-calibration' || cell.kind === 's8c32-data') {
+    return c32RgbToCss(getC32Color(cell.colorIndex).rgb);
+  }
+  if (cell.kind === 'shape-calibration') return '#A8A8A8';
   return '#E8E8E8';
 }
 
@@ -18,6 +26,32 @@ function renderFiducial(center) {
     `<rect x="${center.x - (middle / 2)}" y="${center.y - (middle / 2)}" width="${middle}" height="${middle}" fill="#FFFFFF"/>`,
     `<rect x="${center.x - (core / 2)}" y="${center.y - (core / 2)}" width="${core}" height="${core}" fill="#000000"/>`,
   ].join('');
+}
+
+function glyphFill(cell) {
+  if (cell.kind === 'shape-calibration') return '#000000';
+  const rgb = getC32Color(cell.colorIndex).rgb;
+  return relativeLuminance(rgb) >= 145 ? '#050505' : '#FFFFFF';
+}
+
+function renderGlyph(cell, x, y, cellSize) {
+  if (cell.kind !== 'shape-calibration' && cell.kind !== 's8c32-data') return '';
+  const shape = getS8Shape(cell.shapeId);
+  const module = cellSize / 8; // 2px when the logical cell is 16px.
+  const glyphSize = module * 5;
+  const offset = (cellSize - glyphSize) / 2;
+  const fill = glyphFill(cell);
+  const parts = [];
+
+  shape.mask.forEach((row, gy) => {
+    [...row].forEach((bit, gx) => {
+      if (bit !== '1') return;
+      parts.push(
+        `<rect x="${x + offset + (gx * module)}" y="${y + offset + (gy * module)}" width="${module}" height="${module}" fill="${fill}"/>`,
+      );
+    });
+  });
+  return parts.join('');
 }
 
 export function renderOpticalFrameSvg(frame, options = {}) {
@@ -35,8 +69,6 @@ export function renderOpticalFrameSvg(frame, options = {}) {
     `<rect x="${quietZone}" y="${quietZone}" width="${frame.logicalSize}" height="${frame.logicalSize}" fill="#E8E8E8" stroke="#000000" stroke-width="${borderWidth}"/>`,
   ];
 
-  // Dedicated automatic-alignment locators live entirely in the quiet zone.
-  // They do not consume any payload or calibration cells.
   for (const center of getV1FiducialCenters(total, quietZone)) {
     parts.push(renderFiducial(center));
   }
@@ -48,6 +80,7 @@ export function renderOpticalFrameSvg(frame, options = {}) {
       parts.push(
         `<rect x="${x}" y="${y}" width="${frame.cellSize}" height="${frame.cellSize}" fill="${fillForCell(cell)}"${gridStroke}/>`
       );
+      parts.push(renderGlyph(cell, x, y, frame.cellSize));
     }
   }
 
