@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Optical Screen-to-Camera Link</title>
+  <style>
+    :root { font-family: Inter, system-ui, sans-serif; color: #e9eef7; background: #0b0f16; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    main { width: min(900px,100%); }
+    h1 { font-size: clamp(34px,7vw,64px); margin: 0 0 10px; }
+    .lead { color: #9fb0c5; font-size: 18px; line-height: 1.6; max-width: 760px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 16px; margin-top: 30px; }
+    .card { padding: 22px; border: 1px solid #29364a; border-radius: 16px; background: #111923; }
+    .card h2 { margin-top: 0; }
+    .card p { color: #9fb0c5; line-height: 1.5; }
+    a.button { display: inline-block; padding: 11px 15px; border-radius: 10px; background: #1d6fd6; color: #fff; text-decoration: none; font-weight: 700; }
+    code { color: #b7e4ff; }
+    .note { margin-top: 26px; color: #7f8da1; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Optical Link V1</h1>
+  <p class="lead">Experimental visible-light data transfer using an ordinary screen as the transmitter and an ordinary camera as the receiver. V1 intentionally runs slowly while we validate geometry, colour calibration and packet integrity.</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1. Sender</h2>
+      <p>Enter text, generate C16 optical frames, switch to fullscreen, then play the packet sequence at 0.5–2 fps.</p>
+      <a class="button" href="./apps/sender-web/">Open Sender</a>
+    </section>
+
+    <section class="card">
+      <h2>2. Receiver</h2>
+      <p>Start the camera, point it at the fullscreen sender, and watch the receiver lock the ROI, decode colour symbols and reconstruct the transfer.</p>
+      <a class="button" href="./apps/receiver-web/">Open Receiver</a>
+    </section>
+  </div>
+
+  <p class="note">Baseline profile: <code>V1-G16-C16</code> · 256×256 logical ROI · 16×16 cells · 16 colour regions · CRC32 packet validation.</p>
+</main>
+</body>
+</html>
