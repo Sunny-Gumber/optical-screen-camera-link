@@ -173,18 +173,22 @@ function handleValidPacket(packetBytes, opticalResult) {
     throw error;
   }
 
+  // A valid packet from a different session always starts a fresh transfer,
+  // even if the previous transfer had already completed.
+  if (receiver.sessionId !== null && decoded.sessionId !== receiver.sessionId) {
+    const oldSession = receiver.sessionId;
+    receiver.reset();
+    seenPackets.clear();
+    lastCompletedSession = null;
+    output.textContent = 'Waiting for a complete transfer…';
+    log(`Detected new session ${decoded.sessionId}; session ${oldSession} cleared.`);
+  }
+
   const key = packetKey(decoded);
   if (seenPackets.has(key)) {
     metrics.duplicateOpticalFrames += 1;
     setPill(packetState, `Repeat ${FRAME_TYPE_NAMES[decoded.frameType]} #${decoded.sequence}`);
     return;
-  }
-
-  // A valid packet from a new session means the sender started a fresh transfer.
-  if (receiver.sessionId !== null && decoded.sessionId !== receiver.sessionId && !receiver.status().complete) {
-    receiver.reset();
-    seenPackets.clear();
-    log(`Detected new session ${decoded.sessionId}; previous incomplete session discarded.`);
   }
 
   const status = receiver.addPacket(packetBytes);
