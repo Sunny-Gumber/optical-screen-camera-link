@@ -1,14 +1,18 @@
 // Five-by-five high-contrast glyph masks. Each module renders as a 2×2 block
 // inside a 16×16 optical cell, leaving untouched corner patches for colour
 // measurement. The receiver learns the captured shape templates every frame.
+//
+// Important: none of the data glyphs should resemble the black/white/black
+// quiet-zone fiducials. Earlier V2 used a ring as shape 0; zero padding then
+// produced many miniature locator-like symbols and could steal corner lock.
 export const S8_SHAPES = Object.freeze([
-  Object.freeze({ name: 'ring', mask: Object.freeze(['01110', '10001', '10001', '10001', '01110']) }),
+  Object.freeze({ name: 't', mask: Object.freeze(['11111', '00100', '00100', '00100', '00100']) }),
   Object.freeze({ name: 'x', mask: Object.freeze(['10001', '01010', '00100', '01010', '10001']) }),
   Object.freeze({ name: 'plus', mask: Object.freeze(['00100', '00100', '11111', '00100', '00100']) }),
   Object.freeze({ name: 'diamond', mask: Object.freeze(['00100', '01010', '10001', '01010', '00100']) }),
   Object.freeze({ name: 'horizontal-bars', mask: Object.freeze(['11111', '00000', '11111', '00000', '11111']) }),
   Object.freeze({ name: 'vertical-bars', mask: Object.freeze(['10101', '10101', '10101', '10101', '10101']) }),
-  Object.freeze({ name: 'corner-blocks', mask: Object.freeze(['11011', '11011', '00000', '11011', '11011']) }),
+  Object.freeze({ name: 'left-bracket', mask: Object.freeze(['11100', '10000', '10000', '10000', '11100']) }),
   Object.freeze({ name: 'stair', mask: Object.freeze(['11000', '01100', '00110', '00011', '10001']) }),
 ]);
 
