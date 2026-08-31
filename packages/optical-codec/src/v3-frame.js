@@ -66,18 +66,14 @@ export function rsInterleaveV3(dataNibbles, profile = V3_G64_S4_C4_RS) {
   if (!(dataNibbles instanceof Uint8Array) || dataNibbles.length !== profile.dataNibbleCapacity) {
     throw new TypeError(`V3 data nibble stream must contain ${profile.dataNibbleCapacity} symbols`);
   }
-
   const codewords = Array.from({ length: profile.rsCodewordCount }, (_, block) => {
     const start = block * RS16_K;
     return rs16Encode(dataNibbles.slice(start, start + RS16_K));
   });
-
   const interleaved = new Uint8Array(profile.encodedSymbolCapacity);
   let index = 0;
   for (let symbolPosition = 0; symbolPosition < RS16_N; symbolPosition += 1) {
-    for (let block = 0; block < codewords.length; block += 1) {
-      interleaved[index++] = codewords[block][symbolPosition];
-    }
+    for (let block = 0; block < codewords.length; block += 1) interleaved[index++] = codewords[block][symbolPosition];
   }
   return interleaved;
 }
@@ -89,18 +85,55 @@ export function deinterleaveV3(symbols, profile = V3_G64_S4_C4_RS) {
   const codewords = Array.from({ length: profile.rsCodewordCount }, () => new Uint8Array(RS16_N));
   let index = 0;
   for (let symbolPosition = 0; symbolPosition < RS16_N; symbolPosition += 1) {
-    for (let block = 0; block < codewords.length; block += 1) {
-      codewords[block][symbolPosition] = symbols[index++];
-    }
+    for (let block = 0; block < codewords.length; block += 1) codewords[block][symbolPosition] = symbols[index++];
   }
   return codewords;
 }
 
+export function recoverV3PacketFromSymbols(symbols, profile = V3_G64_S4_C4_RS) {
+  const codewords = deinterleaveV3(symbols, profile);
+  const recovered = [];
+  let packetLength = null;
+  let requiredNibbles = null;
+  let correctedSymbols = 0;
+  let blocksDecoded = 0;
+
+  for (let blockIndex = 0; blockIndex < codewords.length; blockIndex += 1) {
+    let decoded;
+    try {
+      decoded = rs16Decode(codewords[blockIndex]);
+    } catch (error) {
+      error.blockIndex = blockIndex;
+      throw error;
+    }
+    correctedSymbols += decoded.correctedSymbols;
+    blocksDecoded += 1;
+    recovered.push(...decoded.data);
+
+    if (packetLength === null && recovered.length >= 4) {
+      const header = nibblesToBytes(Uint8Array.from(recovered.slice(0, 4)), 2);
+      packetLength = new DataView(header.buffer).getUint16(0, false);
+      if (packetLength < 1 || packetLength > profile.maxPacketBytes) {
+        throw new Error(`Invalid V3 packet length ${packetLength}`);
+      }
+      requiredNibbles = (profile.lengthPrefixBytes + packetLength) * 2;
+    }
+    if (requiredNibbles !== null && recovered.length >= requiredNibbles) break;
+  }
+
+  if (packetLength === null || recovered.length < requiredNibbles) throw new Error('V3 packet was not fully recovered');
+  const envelope = nibblesToBytes(Uint8Array.from(recovered), profile.lengthPrefixBytes + packetLength);
+  return {
+    packetBytes: envelope.slice(profile.lengthPrefixBytes),
+    correctedSymbols,
+    blocksDecoded,
+    packetLength,
+  };
+}
+
 export function encodeV3Frame(packetBytes, profile = V3_G64_S4_C4_RS) {
   if (!(packetBytes instanceof Uint8Array)) throw new TypeError('encodeV3Frame expects Uint8Array');
-  if (packetBytes.length > profile.maxPacketBytes) {
-    throw new RangeError(`Packet is ${packetBytes.length} bytes; ${profile.id} allows ${profile.maxPacketBytes}`);
-  }
+  if (packetBytes.length > profile.maxPacketBytes) throw new RangeError(`Packet is ${packetBytes.length} bytes; ${profile.id} allows ${profile.maxPacketBytes}`);
 
   const envelope = new Uint8Array(profile.dataByteCapacity);
   fillPadding(envelope, packetBytes.length);
@@ -120,7 +153,6 @@ export function encodeV3Frame(packetBytes, profile = V3_G64_S4_C4_RS) {
     cells[y][0] = { x: 0, y, kind: 'v3-timing', dark: (y & 1) === 0 };
     cells[y][last] = { x: last, y, kind: 'v3-timing', dark: (y & 1) === 0 };
   }
-
   for (const finder of profile.finderOrigins) placeFinder(cells, finder);
 
   for (let colorIndex = 0; colorIndex < profile.colorCount; colorIndex += 1) {
@@ -170,36 +202,5 @@ export function decodeV3Frame(frame, profile = V3_G64_S4_C4_RS) {
     if (!cell || cell.kind !== 'v3-data') throw new Error(`Missing V3 data cell at ${x},${y}`);
     symbols[index] = joinV3Nibble(cell.shapeId, cell.colorIndex);
   });
-
-  const codewords = deinterleaveV3(symbols, profile);
-  const recovered = [];
-  let packetLength = null;
-  let requiredNibbles = null;
-  let correctedSymbols = 0;
-  let blocksDecoded = 0;
-
-  for (const codeword of codewords) {
-    const decoded = rs16Decode(codeword);
-    correctedSymbols += decoded.correctedSymbols;
-    blocksDecoded += 1;
-    recovered.push(...decoded.data);
-
-    if (packetLength === null && recovered.length >= 4) {
-      const header = nibblesToBytes(Uint8Array.from(recovered.slice(0, 4)), 2);
-      packetLength = new DataView(header.buffer).getUint16(0, false);
-      if (packetLength < 1 || packetLength > profile.maxPacketBytes) {
-        throw new Error(`Invalid V3 packet length ${packetLength}`);
-      }
-      requiredNibbles = (profile.lengthPrefixBytes + packetLength) * 2;
-    }
-    if (requiredNibbles !== null && recovered.length >= requiredNibbles) break;
-  }
-
-  if (packetLength === null || recovered.length < requiredNibbles) throw new Error('V3 packet was not fully recovered');
-  const envelope = nibblesToBytes(Uint8Array.from(recovered), profile.lengthPrefixBytes + packetLength);
-  return {
-    packetBytes: envelope.slice(profile.lengthPrefixBytes),
-    correctedSymbols,
-    blocksDecoded,
-  };
+  return recoverV3PacketFromSymbols(symbols, profile);
 }
