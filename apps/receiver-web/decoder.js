@@ -86,8 +86,6 @@ export function scoreRotation(imageData, rotation, profile = V1_G16_C16) {
   const darkMean = mean(dark);
   const lightMean = mean(light);
   const separation = lightMean - darkMean;
-
-  // Reward strong black/white separation and gently reward absolute black/white quality.
   const score = separation + ((255 - Math.abs(255 - lightMean)) * 0.12) + ((255 - darkMean) * 0.12);
   return { rotation, score, darkMean, lightMean, separation };
 }
@@ -95,10 +93,7 @@ export function scoreRotation(imageData, rotation, profile = V1_G16_C16) {
 export function detectOrientation(imageData, profile = V1_G16_C16) {
   const candidates = ROTATIONS.map((rotation) => scoreRotation(imageData, rotation, profile));
   candidates.sort((a, b) => b.score - a.score);
-  return {
-    ...candidates[0],
-    candidates,
-  };
+  return { ...candidates[0], candidates };
 }
 
 function chromaVector(rgb) {
@@ -124,11 +119,7 @@ function squaredDistance(a, b) {
 export function buildCalibration(imageData, rotation, profile = V1_G16_C16) {
   return Array.from({ length: profile.symbolCount }, (_, symbol) => {
     const rgb = sampleCellRgb(imageData, symbol, profile.calibrationRow, rotation, profile);
-    return {
-      symbol,
-      rgb,
-      vector: chromaVector(rgb),
-    };
+    return { symbol, rgb, vector: chromaVector(rgb) };
   });
 }
 
@@ -156,6 +147,50 @@ export function classifyRgb(rgb, calibration) {
   };
 }
 
+/**
+ * Recover one logical C16 symbol from spatially interleaved repeated copies.
+ * 2-of-3 majority corrects one symbol error. If all three disagree, choose the
+ * classification with the smallest normalized centroid distance and report it
+ * as uncorrectable so diagnostics show channel quality honestly.
+ */
+export function recoverRepeatedClassifications(classifications, profile = V1_G16_C16) {
+  const repetition = profile.repetition ?? 1;
+  const logicalCount = profile.dataSymbolCapacity;
+  if (classifications.length !== logicalCount * repetition) {
+    throw new RangeError('Repeated classification count does not match profile');
+  }
+
+  const symbols = new Uint8Array(logicalCount);
+  let disagreementGroups = 0;
+  let correctedGroups = 0;
+  let uncorrectableGroups = 0;
+
+  for (let i = 0; i < logicalCount; i += 1) {
+    const copies = [];
+    for (let copy = 0; copy < repetition; copy += 1) {
+      copies.push(classifications[i + (copy * logicalCount)]);
+    }
+
+    const counts = new Map();
+    for (const item of copies) counts.set(item.symbol, (counts.get(item.symbol) ?? 0) + 1);
+    const rankedCounts = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const [majoritySymbol, majorityCount] = rankedCounts[0];
+
+    if (counts.size > 1) disagreementGroups += 1;
+
+    if (majorityCount >= Math.floor(repetition / 2) + 1) {
+      symbols[i] = majoritySymbol;
+      if (counts.size > 1) correctedGroups += 1;
+    } else {
+      uncorrectableGroups += 1;
+      const best = copies.reduce((a, b) => (a.distance <= b.distance ? a : b));
+      symbols[i] = best.symbol;
+    }
+  }
+
+  return { symbols, disagreementGroups, correctedGroups, uncorrectableGroups };
+}
+
 export function decodeRectifiedRoi(roiCanvas, profile = V1_G16_C16) {
   if (!(roiCanvas instanceof HTMLCanvasElement)) {
     throw new TypeError('decodeRectifiedRoi expects a canvas');
@@ -173,20 +208,22 @@ export function decodeRectifiedRoi(roiCanvas, profile = V1_G16_C16) {
   }
 
   const calibration = buildCalibration(imageData, orientation.rotation, profile);
-  const dataCoordinates = getDataCellCoordinates(profile);
-  const symbols = new Uint8Array(profile.dataSymbolCapacity);
+  const dataCoordinates = getDataCellCoordinates(profile)
+    .slice(0, profile.encodedSymbolCapacity);
+  const classifications = [];
   let confidenceSum = 0;
   let minimumConfidence = 1;
 
-  dataCoordinates.forEach(({ x, y }, index) => {
+  dataCoordinates.forEach(({ x, y }) => {
     const rgb = sampleCellRgb(imageData, x, y, orientation.rotation, profile);
     const classified = classifyRgb(rgb, calibration);
-    symbols[index] = classified.symbol;
+    classifications.push(classified);
     confidenceSum += classified.confidence;
     minimumConfidence = Math.min(minimumConfidence, classified.confidence);
   });
 
-  const envelope = c16SymbolsToBytes(symbols);
+  const recovery = recoverRepeatedClassifications(classifications, profile);
+  const envelope = c16SymbolsToBytes(recovery.symbols);
   const view = new DataView(envelope.buffer, envelope.byteOffset, envelope.byteLength);
   const packetLength = view.getUint16(0, false);
 
@@ -201,8 +238,12 @@ export function decodeRectifiedRoi(roiCanvas, profile = V1_G16_C16) {
     ),
     rotation: orientation.rotation,
     finderSeparation: orientation.separation,
-    averageConfidence: confidenceSum / dataCoordinates.length,
+    averageConfidence: confidenceSum / classifications.length,
     minimumConfidence,
     calibration,
+    repetition: profile.repetition,
+    repetitionDisagreements: recovery.disagreementGroups,
+    repetitionCorrections: recovery.correctedGroups,
+    repetitionUncorrectable: recovery.uncorrectableGroups,
   };
 }
