@@ -4,10 +4,12 @@ import {
   V2_S8_C32_R3,
   V21_S8_C16_R3,
   V22_S8_C8_B4_R3,
+  V3_G64_S4_C4_RS,
   encodeOpticalFrame,
   encodeS8C32Frame,
   encodeS8C16Frame,
   encodeS8C8B4Frame,
+  encodeV3Frame,
   renderOpticalFrameSvg,
 } from '../../packages/optical-codec/src/index.js';
 
@@ -26,24 +28,26 @@ let transfer = null;
 let frames = [];
 let currentIndex = 0;
 let timer = null;
-let activeProfile = V22_S8_C8_B4_R3;
+let activeProfile = V3_G64_S4_C4_RS;
 let visualVariant = 0;
 
 function selectedProfile() {
   if (profileSelect.value === 'v1') return V1_G16_C16;
   if (profileSelect.value === 'v21') return V21_S8_C16_R3;
   if (profileSelect.value === 'v22') return V22_S8_C8_B4_R3;
-  return V2_S8_C32_R3;
+  if (profileSelect.value === 'v2') return V2_S8_C32_R3;
+  return V3_G64_S4_C4_RS;
 }
 
 function encoderForProfile(profile) {
+  if (profile.id === V3_G64_S4_C4_RS.id) return encodeV3Frame;
   if (profile.id === V22_S8_C8_B4_R3.id) return encodeS8C8B4Frame;
   if (profile.id === V21_S8_C16_R3.id) return encodeS8C16Frame;
   if (profile.id === V2_S8_C32_R3.id) return encodeS8C32Frame;
   return encodeOpticalFrame;
 }
 
-function isHybridProfile(profile) {
+function isLegacyHybridProfile(profile) {
   return [V22_S8_C8_B4_R3.id, V21_S8_C16_R3.id, V2_S8_C32_R3.id].includes(profile.id);
 }
 
@@ -65,12 +69,12 @@ function renderCurrentFrame() {
     return;
   }
 
+  const v3 = activeProfile.id === V3_G64_S4_C4_RS.id;
   frameHost.innerHTML = renderOpticalFrameSvg(frames[currentIndex], {
-    scale: 2,
-    quietZone: 24,
-    borderWidth: 4,
+    scale: v3 ? 1 : 2,
+    borderWidth: v3 ? 6 : 4,
     showGrid: false,
-    visualVariant: isHybridProfile(activeProfile) ? visualVariant : 0,
+    visualVariant: isLegacyHybridProfile(activeProfile) ? visualVariant : 0,
   });
 
   const inputBytes = new TextEncoder().encode(message.value).length;
@@ -82,7 +86,9 @@ function renderCurrentFrame() {
     `DATA packets: ${transfer.dataPacketCount}`,
     `Chunk: ${transfer.chunkSize} bytes`,
     `Rate: ${currentRateLabel()}`,
-    isHybridProfile(activeProfile) ? `Visual variant: ${visualVariant}` : null,
+    v3 ? `Grid: ${activeProfile.gridSize}×${activeProfile.gridSize}` : null,
+    v3 ? `RS: (${activeProfile.rsN},${activeProfile.rsK}) · corrects ${activeProfile.rsCorrectableSymbols}/block` : null,
+    isLegacyHybridProfile(activeProfile) ? `Visual variant: ${visualVariant}` : null,
   ].filter(Boolean).map((value) => `<span class="tag">${value}</span>`).join('');
 }
 
@@ -102,7 +108,7 @@ function generateFrames() {
 function advanceFrame(step = 1) {
   if (!frames.length) return;
   currentIndex = (currentIndex + step + frames.length) % frames.length;
-  if (isHybridProfile(activeProfile)) visualVariant = (visualVariant + 1) & 0xFFFF;
+  if (isLegacyHybridProfile(activeProfile)) visualVariant = (visualVariant + 1) & 0xFFFF;
   renderCurrentFrame();
 }
 
