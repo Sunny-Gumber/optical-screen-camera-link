@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Optical Screen-to-Camera Receiver V1.2</title>
+  <title>Optical Screen-to-Camera Receiver V1.3</title>
   <style>
     :root {
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -37,7 +37,7 @@
     }
     .camera-wrap { position: relative; overflow: hidden; border-radius: 12px; background: #05070a; }
     #camera { display: none; }
-    #sourceCanvas { width: 100%; height: auto; display: block; background: #05070a; }
+    #sourceCanvas { width: 100%; height: auto; display: block; background: #05070a; touch-action: none; cursor: crosshair; }
     .pill {
       padding: 7px 10px;
       border-radius: 999px;
@@ -83,17 +83,20 @@
     #log { max-height: 220px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: #9fb0c5; }
     .hint { color: #9aa8bb; font-size: 14px; line-height: 1.55; }
     .important { color: #ffd84a; }
+    .step { color: #d9e5f4; }
     a { color: #8fc2ff; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Optical Receiver V1.2</h1>
-  <p class="sub">Lightweight camera receiver · camera fallback/diagnostics · manual alignment → C16 calibration → CRC → transfer reassembly</p>
+  <h1>Optical Receiver V1.3</h1>
+  <p class="sub">Lightweight camera receiver · 4-corner perspective correction · C16 calibration → CRC → transfer reassembly</p>
 
   <div class="toolbar">
     <button id="startCamera">Start Camera</button>
     <button id="stopCamera" disabled>Stop Camera</button>
+    <button id="setCorners" disabled>Set 4 Corners</button>
+    <button id="clearCorners" disabled>Clear Corners</button>
     <button id="resetTransfer">Reset Transfer</button>
     <label class="toggle"><input id="toggleDebug" type="checkbox"> Show debug views</label>
     <a href="../sender-web/">Open Sender</a>
@@ -117,7 +120,7 @@
 
     <div id="cameraError" hidden></div>
 
-    <p class="hint"><strong class="important">First-test method:</strong> on the sender use <strong>1 fps</strong> and <strong>Fullscreen Frame</strong>. On this receiver, press <strong>Start Camera</strong>. If the browser asks for permission, choose <strong>Allow</strong>. Move closer/farther until the sender's complete <strong>outer white square</strong> fits inside the yellow square guide. Keep the camera reasonably straight.</p>
+    <p class="hint"><strong class="important">V1.3 test:</strong> on the sender use <strong>1 fps</strong> and <strong>Fullscreen Frame</strong>. Start the receiver camera, then press <strong>Set 4 Corners</strong>. Tap/click the sender's outer white-square corners in this exact order: <strong class="step">top-left → top-right → bottom-right → bottom-left</strong>. After the fourth point the receiver continuously perspective-corrects that quadrilateral. Keep both devices steady while the frames cycle.</p>
   </section>
 
   <section class="panel">
@@ -137,7 +140,7 @@
     <h2>Debug views</h2>
     <div class="debug-grid">
       <div>
-        <h3>Guide crop normalized to 304×304</h3>
+        <h3>4-corner perspective result · 304×304</h3>
         <canvas id="rectifiedCanvas" width="304" height="304"></canvas>
       </div>
       <div>
