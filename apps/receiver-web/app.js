@@ -6,11 +6,12 @@ import {
   openCameraWithFallback,
 } from './camera.js';
 import {
-  drawGuideOverlay,
+  drawCornerOverlay,
   drawVideoFrame,
+  eventToCanvasPoint,
   extractLogicalRoi,
-  getCenteredGuideRect,
-  rectifyGuide,
+  rectifyQuad,
+  validateCornerQuad,
 } from './vision.js';
 
 const video = document.querySelector('#camera');
@@ -20,6 +21,8 @@ const roiCanvas = document.querySelector('#roiCanvas');
 const startButton = document.querySelector('#startCamera');
 const stopButton = document.querySelector('#stopCamera');
 const resetButton = document.querySelector('#resetTransfer');
+const setCornersButton = document.querySelector('#setCorners');
+const clearCornersButton = document.querySelector('#clearCorners');
 const refreshCamerasButton = document.querySelector('#refreshCameras');
 const cameraSelect = document.querySelector('#cameraSelect');
 const cameraError = document.querySelector('#cameraError');
@@ -40,6 +43,10 @@ let receiver = new TransferReassembler();
 let seenPackets = new Set();
 let lastCompletedSession = null;
 let metrics = createMetrics();
+let cornerPoints = [];
+let selectingCorners = false;
+
+const CORNER_NAMES = ['TL', 'TR', 'BR', 'BL'];
 
 function createMetrics() {
   return {
@@ -122,9 +129,35 @@ function resetTransfer(reason = 'manual reset') {
   output.textContent = 'Waiting for a complete transfer…';
   setPill(packetState, 'No packet yet');
   setPill(transferState, 'Waiting');
-  setPill(lockState, running ? 'Align frame' : 'No frame');
+  if (running) {
+    setPill(lockState, cornerPoints.length === 4 ? 'Corners set' : 'Set 4 corners', 'working');
+  } else {
+    setPill(lockState, 'No frame');
+  }
   log(`Transfer state reset (${reason}).`);
   renderMetrics();
+}
+
+function beginCornerSelection() {
+  if (!running) {
+    setPill(lockState, 'Start camera first', 'bad');
+    return;
+  }
+  cornerPoints = [];
+  selectingCorners = true;
+  setPill(lockState, 'Tap TL corner (1/4)', 'working');
+  setCornersButton.textContent = 'Selecting…';
+  clearCornersButton.disabled = false;
+  log('Corner selection started. Tap TL → TR → BR → BL on the sender outer white square.');
+}
+
+function clearCorners(reason = 'manual') {
+  cornerPoints = [];
+  selectingCorners = false;
+  setCornersButton.textContent = 'Set 4 Corners';
+  clearCornersButton.disabled = true;
+  if (running) setPill(lockState, 'Set 4 corners', 'working');
+  log(`Perspective corners cleared (${reason}).`);
 }
 
 async function refreshCameraList(preferredDeviceId = '') {
@@ -163,7 +196,7 @@ async function startCamera() {
   startButton.disabled = true;
   showCameraError(null);
   setPill(cameraState, 'Requesting camera…', 'working');
-  setPill(lockState, 'Preparing guide…', 'working');
+  setPill(lockState, 'Starting camera…', 'working');
 
   try {
     if (!window.isSecureContext) {
@@ -188,14 +221,15 @@ async function startCamera() {
 
     running = true;
     stopButton.disabled = false;
+    setCornersButton.disabled = false;
     const track = stream.getVideoTracks()[0];
     const settings = track?.getSettings?.() || {};
     await refreshCameraList(settings.deviceId || selectedDeviceId);
 
     setPill(cameraState, `${video.videoWidth}×${video.videoHeight} active`, 'good');
-    setPill(lockState, 'Align frame', 'working');
     showCameraError(null);
-    log(`Camera started using ${opened.attempt}. Align the sender outer white square with the yellow guide.`);
+    clearCorners('new camera session');
+    log(`Camera started using ${opened.attempt}. Set the four sender corners to correct perspective.`);
     scheduleLoop(0);
   } catch (error) {
     if (stream) {
@@ -205,6 +239,7 @@ async function startCamera() {
     video.srcObject = null;
     startButton.disabled = false;
     stopButton.disabled = true;
+    setCornersButton.disabled = true;
 
     const info = describeCameraError(error);
     setPill(cameraState, info.title, 'bad');
@@ -227,13 +262,13 @@ function stopCamera() {
   video.srcObject = null;
   startButton.disabled = false;
   stopButton.disabled = true;
+  setCornersButton.disabled = true;
+  clearCorners('camera stopped');
   setPill(cameraState, 'Stopped');
   setPill(lockState, 'No frame');
   log('Camera stopped.');
 }
 
-// About four processing attempts per second is enough for the 0.5–2 fps sender
-// and keeps CPU use low on ordinary phones.
 function scheduleLoop(delay = 240) {
   if (!running) return;
   loopTimer = setTimeout(processFrame, delay);
@@ -280,8 +315,7 @@ function handleValidPacket(packetBytes, opticalResult) {
     if (lastCompletedSession !== status.sessionId) {
       lastCompletedSession = status.sessionId;
       const data = receiver.getData();
-      const text = receiver.getText();
-      output.textContent = text;
+      output.textContent = receiver.getText();
       setPill(transferState, `Complete · ${data.length} bytes`, 'good');
       log(`Transfer ${status.sessionId} complete: ${data.length} bytes recovered.`);
     }
@@ -307,12 +341,18 @@ async function processFrame() {
     metrics.captureFrames += 1;
     drawVideoFrame(video, sourceCanvas);
 
-    const guide = getCenteredGuideRect(sourceCanvas.width, sourceCanvas.height);
-    rectifyGuide(sourceCanvas, rectifiedCanvas, guide);
+    if (cornerPoints.length !== 4 || !validateCornerQuad(cornerPoints)) {
+      drawCornerOverlay(sourceCanvas, cornerPoints, 'selecting');
+      renderMetrics();
+      scheduleLoop();
+      return;
+    }
+
+    rectifyQuad(sourceCanvas, rectifiedCanvas, cornerPoints);
     extractLogicalRoi(rectifiedCanvas, roiCanvas);
     metrics.opticalDecodeAttempts += 1;
 
-    let locked = false;
+    let decodedOk = false;
     try {
       const opticalResult = decodeRectifiedRoi(roiCanvas);
       metrics.opticalDecodes += 1;
@@ -322,21 +362,21 @@ async function processFrame() {
 
       handleValidPacket(opticalResult.packetBytes, opticalResult);
       metrics.roiLocks += 1;
-      locked = true;
+      decodedOk = true;
       metrics.lastError = '';
-      setPill(lockState, 'Frame locked', 'good');
+      setPill(lockState, 'Perspective locked', 'good');
     } catch (error) {
       metrics.lastError = error.message;
-      setPill(lockState, 'Align frame', 'working');
+      setPill(lockState, 'Corners set · refining', 'working');
       if (!String(error.message).includes('CRC')) {
         setPill(packetState, 'Waiting for clean frame');
       }
     }
 
-    drawGuideOverlay(sourceCanvas, guide, locked ? 'locked' : 'align');
+    drawCornerOverlay(sourceCanvas, cornerPoints, decodedOk ? 'decoded' : 'locked');
   } catch (error) {
     metrics.lastError = error.message;
-    setPill(lockState, 'Processing error', 'bad');
+    setPill(lockState, 'Perspective error', 'bad');
     log(`Frame processing error: ${error.message}`);
   }
 
@@ -344,9 +384,35 @@ async function processFrame() {
   scheduleLoop();
 }
 
+sourceCanvas.addEventListener('pointerdown', (event) => {
+  if (!running || !selectingCorners) return;
+  event.preventDefault();
+  const point = eventToCanvasPoint(sourceCanvas, event);
+  cornerPoints.push(point);
+  const index = cornerPoints.length - 1;
+  log(`${CORNER_NAMES[index]} corner set at ${Math.round(point.x)},${Math.round(point.y)}.`);
+
+  if (cornerPoints.length === 4) {
+    selectingCorners = false;
+    setCornersButton.textContent = 'Set 4 Corners Again';
+    if (validateCornerQuad(cornerPoints)) {
+      setPill(lockState, '4 corners set', 'working');
+      log('Perspective quadrilateral accepted. Keep the camera and sender steady.');
+    } else {
+      setPill(lockState, 'Invalid corners · retry', 'bad');
+      log('Selected quadrilateral is invalid or too small. Please set the corners again.');
+    }
+  } else {
+    const next = CORNER_NAMES[cornerPoints.length];
+    setPill(lockState, `Tap ${next} corner (${cornerPoints.length + 1}/4)`, 'working');
+  }
+});
+
 startButton.addEventListener('click', startCamera);
 stopButton.addEventListener('click', stopCamera);
 resetButton.addEventListener('click', () => resetTransfer());
+setCornersButton.addEventListener('click', beginCornerSelection);
+clearCornersButton.addEventListener('click', () => clearCorners());
 refreshCamerasButton.addEventListener('click', () => refreshCameraList());
 cameraSelect.addEventListener('change', () => {
   if (running) {
