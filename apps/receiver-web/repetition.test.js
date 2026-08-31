@@ -23,7 +23,7 @@ test('triple repetition corrects one corrupted copy per logical symbol', () => {
   // Corrupt one spatial copy for several independent logical symbols.
   items[3] = classified(12, 0.80, 0.006);
   items[17 + logicalCount] = classified(2, 0.75, 0.008);
-  items[41 + (2 * logicalCount)] = classified(9, 0.70, 0.010);
+  items[41 + (2 * logicalCount)] = classified(10, 0.70, 0.010);
 
   const recovered = recoverRepeatedClassifications(items, V1_G16_C16);
   for (let i = 0; i < logicalCount; i += 1) {
