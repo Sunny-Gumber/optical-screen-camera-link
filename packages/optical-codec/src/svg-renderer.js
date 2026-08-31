@@ -3,7 +3,39 @@ import { c32RgbToCss, getC32Color, relativeLuminance } from '../../constellation
 import { getV1FiducialCenters, V1_FIDUCIAL } from './fiducials.js';
 import { getS8Shape } from './shapes.js';
 
-function fillForCell(cell) {
+function seededPermutation(length, variant, salt) {
+  const values = Array.from({ length }, (_, index) => index);
+  if (!variant) return values;
+  let state = ((variant * 0x9E3779B1) ^ salt) >>> 0;
+  const next = () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state >>> 0;
+  };
+  for (let i = values.length - 1; i > 0; i -= 1) {
+    const j = next() % (i + 1);
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+  return values;
+}
+
+function visualMaps(variant = 0) {
+  return {
+    c32: seededPermutation(32, variant, 0xC032C032),
+    s8: seededPermutation(8, variant, 0x58085808),
+  };
+}
+
+function displayedC32Index(logicalIndex, maps) {
+  return maps.c32[logicalIndex] ?? logicalIndex;
+}
+
+function displayedShapeId(logicalId, maps) {
+  return maps.s8[logicalId] ?? logicalId;
+}
+
+function fillForCell(cell, maps) {
   if (cell.kind === 'finder' || cell.kind === 'profile-signature') {
     return cell.dark ? '#000000' : '#FFFFFF';
   }
@@ -11,7 +43,7 @@ function fillForCell(cell) {
     return rgbToCss(getC16Color(cell.symbol).rgb);
   }
   if (cell.kind === 'color-calibration' || cell.kind === 's8c32-data') {
-    return c32RgbToCss(getC32Color(cell.colorIndex).rgb);
+    return c32RgbToCss(getC32Color(displayedC32Index(cell.colorIndex, maps)).rgb);
   }
   if (cell.kind === 'shape-calibration') return '#A8A8A8';
   return '#E8E8E8';
@@ -28,19 +60,19 @@ function renderFiducial(center) {
   ].join('');
 }
 
-function glyphFill(cell) {
+function glyphFill(cell, maps) {
   if (cell.kind === 'shape-calibration') return '#000000';
-  const rgb = getC32Color(cell.colorIndex).rgb;
+  const rgb = getC32Color(displayedC32Index(cell.colorIndex, maps)).rgb;
   return relativeLuminance(rgb) >= 145 ? '#050505' : '#FFFFFF';
 }
 
-function renderGlyph(cell, x, y, cellSize) {
+function renderGlyph(cell, x, y, cellSize, maps) {
   if (cell.kind !== 'shape-calibration' && cell.kind !== 's8c32-data') return '';
-  const shape = getS8Shape(cell.shapeId);
-  const module = cellSize / 8; // 2px when the logical cell is 16px.
+  const shape = getS8Shape(displayedShapeId(cell.shapeId, maps));
+  const module = cellSize / 8;
   const glyphSize = module * 5;
   const offset = (cellSize - glyphSize) / 2;
-  const fill = glyphFill(cell);
+  const fill = glyphFill(cell, maps);
   const parts = [];
 
   shape.mask.forEach((row, gy) => {
@@ -59,6 +91,8 @@ export function renderOpticalFrameSvg(frame, options = {}) {
   const quietZone = options.quietZone ?? 24;
   const showGrid = options.showGrid ?? false;
   const borderWidth = options.borderWidth ?? 4;
+  const visualVariant = Number.isInteger(options.visualVariant) ? options.visualVariant : 0;
+  const maps = visualMaps(frame.version === 2 ? visualVariant : 0);
   const total = frame.logicalSize + (quietZone * 2);
   const displaySize = total * scale;
   const gridStroke = showGrid ? ' stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="0.5"' : '';
@@ -78,9 +112,9 @@ export function renderOpticalFrameSvg(frame, options = {}) {
       const x = quietZone + (cell.x * frame.cellSize);
       const y = quietZone + (cell.y * frame.cellSize);
       parts.push(
-        `<rect x="${x}" y="${y}" width="${frame.cellSize}" height="${frame.cellSize}" fill="${fillForCell(cell)}"${gridStroke}/>`
+        `<rect x="${x}" y="${y}" width="${frame.cellSize}" height="${frame.cellSize}" fill="${fillForCell(cell, maps)}"${gridStroke}/>`
       );
-      parts.push(renderGlyph(cell, x, y, frame.cellSize));
+      parts.push(renderGlyph(cell, x, y, frame.cellSize, maps));
     }
   }
 
