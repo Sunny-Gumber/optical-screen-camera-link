@@ -28,16 +28,18 @@
 <body>
 <main>
   <h1>Optical Sender</h1>
-  <p class="sub">V3 high-density optical modem + legacy reliability experiments</p>
+  <p class="sub">V3 adaptive high-density optical modem + legacy reliability experiments</p>
 
   <section class="panel">
     <label for="message"><strong>Data to transmit</strong></label>
-    <textarea id="message">V3 HIGH DENSITY OPTICAL TEST</textarea>
+    <textarea id="message">V3 ADAPTIVE OPTICAL TEST</textarea>
 
     <div class="mode-row">
       <label for="profile"><strong>Optical mode:</strong></label>
       <select id="profile">
-        <option value="v3" selected>V3 Recommended · 64×64 · 4 shapes × 4 colours · RS(15,11) · 1024-byte payload</option>
+        <option value="v3r" selected>V3 Robust · 32×32 · S4×C4 · RS(15,11) · 256-byte payload</option>
+        <option value="v3b">V3 Balanced · 48×48 · S4×C4 · RS(15,11) · 640-byte payload</option>
+        <option value="v3d">V3 Dense · 64×64 · S4×C4 · RS(15,11) · 1024-byte payload</option>
         <option value="v1">V1 Reliable · C16 × R3 · 13-byte payload</option>
         <option value="v21">V2.1 Robust · 8 shapes × 16 colours × R3 · 34-byte payload</option>
         <option value="v22">V2.2 Experimental · 8 shapes × 8 colours × 4 backgrounds × R3 · 42-byte payload</option>
@@ -61,7 +63,7 @@
       <a href="../receiver-web/">Open Legacy Receiver</a>
     </div>
     <div id="stats" class="stats" aria-live="polite"></div>
-    <p class="hint"><strong>V3 strategy:</strong> stop trying to pack many states into a small number of cells. V3 uses a 64×64 grid, only four colours and four very strong shapes, timing tracks around the whole grid, and RS(15,11) correction across interleaved 4-bit symbols. Start at <strong>1 fps</strong> and fullscreen the optical frame.</p>
+    <p class="hint"><strong>V3 adaptive strategy:</strong> start with <strong>32×32 Robust</strong>. It uses the same 768×768 optical ROI as the dense mode but doubles the camera pixels per symbol compared with 64×64. When the receiver shows strong confidence and reliable packets, step to 48×48 and only then 64×64.</p>
   </section>
 
   <section class="panel">
