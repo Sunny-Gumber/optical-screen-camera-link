@@ -2,8 +2,10 @@ import { createTransferPackets } from '../../packages/protocol/src/index.js';
 import {
   V1_G16_C16,
   V2_S8_C32_R3,
+  V21_S8_C16_R3,
   encodeOpticalFrame,
   encodeS8C32Frame,
+  encodeS8C16Frame,
   renderOpticalFrameSvg,
 } from '../../packages/optical-codec/src/index.js';
 
@@ -22,15 +24,23 @@ let transfer = null;
 let frames = [];
 let currentIndex = 0;
 let timer = null;
-let activeProfile = V2_S8_C32_R3;
+let activeProfile = V21_S8_C16_R3;
 let visualVariant = 0;
 
 function selectedProfile() {
-  return profileSelect.value === 'v1' ? V1_G16_C16 : V2_S8_C32_R3;
+  if (profileSelect.value === 'v1') return V1_G16_C16;
+  if (profileSelect.value === 'v21') return V21_S8_C16_R3;
+  return V2_S8_C32_R3;
 }
 
 function encoderForProfile(profile) {
-  return profile.id === V2_S8_C32_R3.id ? encodeS8C32Frame : encodeOpticalFrame;
+  if (profile.id === V21_S8_C16_R3.id) return encodeS8C16Frame;
+  if (profile.id === V2_S8_C32_R3.id) return encodeS8C32Frame;
+  return encodeOpticalFrame;
+}
+
+function isHybridProfile(profile) {
+  return profile.id === V21_S8_C16_R3.id || profile.id === V2_S8_C32_R3.id;
 }
 
 function stopPlayback() {
@@ -56,7 +66,7 @@ function renderCurrentFrame() {
     quietZone: 24,
     borderWidth: 4,
     showGrid: false,
-    visualVariant: activeProfile.id === V2_S8_C32_R3.id ? visualVariant : 0,
+    visualVariant: isHybridProfile(activeProfile) ? visualVariant : 0,
   });
 
   const inputBytes = new TextEncoder().encode(message.value).length;
@@ -68,7 +78,7 @@ function renderCurrentFrame() {
     `DATA packets: ${transfer.dataPacketCount}`,
     `Chunk: ${transfer.chunkSize} bytes`,
     `Rate: ${currentRateLabel()}`,
-    activeProfile.id === V2_S8_C32_R3.id ? `Visual variant: ${visualVariant}` : null,
+    isHybridProfile(activeProfile) ? `Visual variant: ${visualVariant}` : null,
   ].filter(Boolean).map((value) => `<span class="tag">${value}</span>`).join('');
 }
 
@@ -88,7 +98,7 @@ function generateFrames() {
 function advanceFrame(step = 1) {
   if (!frames.length) return;
   currentIndex = (currentIndex + step + frames.length) % frames.length;
-  if (activeProfile.id === V2_S8_C32_R3.id) visualVariant = (visualVariant + 1) & 0xFFFF;
+  if (isHybridProfile(activeProfile)) visualVariant = (visualVariant + 1) & 0xFFFF;
   renderCurrentFrame();
 }
 
