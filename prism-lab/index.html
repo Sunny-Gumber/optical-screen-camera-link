@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#08111f" />
+  <title>Prism Lab — Optics Puzzle V1</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">INTERACTIVE OPTICS</p>
+        <h1>Prism Lab</h1>
+        <p class="subtitle">Guide the beam to the target by positioning and rotating mirrors.</p>
+      </div>
+      <div class="level-chip" aria-live="polite">
+        <span id="levelLabel">Level 1</span>
+        <strong id="levelTitle">First Reflection</strong>
+      </div>
+    </header>
+
+    <section class="game-card">
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="gameCanvas" width="1200" height="700" aria-label="Optics puzzle board"></canvas>
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      </div>
+
+      <aside class="panel">
+        <section class="panel-block">
+          <h2>How to play</h2>
+          <p>Drag a mirror to move it. Tap a mirror to select it, then rotate it until the beam reaches the green target.</p>
+        </section>
+
+        <section class="panel-block selected-card">
+          <div class="row between">
+            <h2>Selected mirror</h2>
+            <span id="selectedName" class="status-pill">Mirror 1</span>
+          </div>
+          <div class="angle-readout"><span id="angleValue">0</span>°</div>
+          <div class="control-grid">
+            <button id="rotateLeft" type="button">↶ Rotate</button>
+            <button id="rotateRight" type="button">Rotate ↷</button>
+          </div>
+          <label class="range-label" for="angleSlider">Fine rotation</label>
+          <input id="angleSlider" type="range" min="0" max="179" step="1" value="0" />
+        </section>
+
+        <section class="panel-block">
+          <label class="toggle-row">
+            <input id="physicsToggle" type="checkbox" />
+            <span>Physics view</span>
+          </label>
+          <p class="small">Shows mirror normals, hit points and reflection angles.</p>
+        </section>
+
+        <section class="panel-block actions">
+          <button id="prevLevel" type="button" class="secondary">← Previous</button>
+          <button id="resetLevel" type="button" class="secondary">Reset</button>
+          <button id="nextLevel" type="button">Next →</button>
+        </section>
+
+        <section class="panel-block legend">
+          <h2>Legend</h2>
+          <div><span class="dot source"></span> Light source</div>
+          <div><span class="line mirror"></span> Mirror</div>
+          <div><span class="dot target"></span> Target</div>
+        </section>
+      </aside>
+    </section>
+
+    <footer>
+      <span>V1 • Runs fully in your browser • No server required</span>
+      <span id="progressText">0 / 4 levels solved</span>
+    </footer>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
