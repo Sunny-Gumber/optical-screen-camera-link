@@ -4,79 +4,98 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#07111f" />
-    <title>Prism Lab V3 — Stage 2 Refraction & Dispersion</title>
+    <title>Prism Lab V3 — Stage 3 Splitters & Goals</title>
   </head>
   <body>
     <main class="app-shell">
       <header class="hero">
         <div>
           <p class="eyebrow">PRISM LAB V3 · PHYSICS CORE</p>
-          <h1>Refraction & Dispersion</h1>
-          <p class="lede">Stage 2 diagnostic scene: Snell's law, glass medium tracking, total internal reflection, and wavelength-dependent Cauchy dispersion.</p>
+          <h1>Splitters & Goals</h1>
+          <p class="lede">Stage 3 diagnostic scene: branching ray trees, intensity attenuation, color-aware goal evaluation, and simultaneous win detection.</p>
         </div>
-        <div class="metrics" aria-live="polite">
-          <div><span>Segments</span><strong id="segmentCount">0</strong></div>
-          <div><span>Interactions</span><strong id="interactionCount">0</strong></div>
-          <div><span>Spectrum</span><strong id="spectralCount">0</strong></div>
-          <div><span>Frame</span><strong id="frameCost">0 ms</strong></div>
+        <div class="hero-side">
+          <div id="solvedIndicator" class="solved-indicator">SOLVED: FALSE</div>
+          <div class="metrics" aria-live="polite">
+            <div><span>Segments</span><strong id="segmentCount">0</strong></div>
+            <div><span>Ray nodes</span><strong id="rayNodeCount">0</strong></div>
+            <div><span>Culled</span><strong id="culledCount">0</strong></div>
+            <div><span>Frame</span><strong id="frameCost">0 ms</strong></div>
+          </div>
         </div>
       </header>
 
       <section class="stage-card">
         <div class="canvas-wrap">
-          <canvas id="stage" width="1200" height="720" aria-label="Refraction and prism dispersion diagnostic scene"></canvas>
-          <div class="drag-hint">Drag the glass body · rotate with the control panel</div>
+          <canvas id="stage" width="1200" height="720" aria-label="Beam splitter and goal diagnostic scene"></canvas>
+          <div class="drag-hint">Drag the highlighted splitter · rotate and change ratio from the panel</div>
         </div>
 
         <aside class="controls">
           <h2>QA preset</h2>
           <select id="preset">
-            <option value="prism">Prism dispersion</option>
-            <option value="slab">Flat slab / known angle</option>
-            <option value="tir">Total internal reflection</option>
+            <option value="dual">Basic split · two goals</option>
+            <option value="chain">Splitter chain · culling</option>
+            <option value="attenuation">Attenuation threshold</option>
+            <option value="spectrum">White goal via prism spectrum</option>
           </select>
 
           <h2>Emitter</h2>
-          <label>Angle <output id="angleReadout">0.0°</output></label>
-          <input id="angle" type="range" min="-70" max="70" value="0" step="0.5" />
           <label class="stacked-label" for="wavelength">Light</label>
           <select id="wavelength">
-            <option value="white">White (400–700 nm on entry)</option>
+            <option value="650">650 nm red</option>
             <option value="450">450 nm blue</option>
             <option value="550">550 nm green</option>
-            <option value="650">650 nm red</option>
+            <option value="white">White / full spectrum</option>
           </select>
+          <label>Input intensity <output id="emitterIntensityReadout">1.00</output></label>
+          <input id="emitterIntensity" type="range" min="0.05" max="1" value="1" step="0.01" />
 
-          <h2>Refractor</h2>
-          <label>Rotation <output id="rotationReadout">0.0°</output></label>
-          <input id="rotation" type="range" min="-80" max="80" value="0" step="0.25" />
-          <label>n at 589 nm <output id="nBaseReadout">1.520</output></label>
-          <input id="nBase" type="range" min="1.30" max="1.80" value="1.52" step="0.001" />
-          <label>Dispersion B <output id="dispersionReadout">4200 nm²</output></label>
-          <input id="dispersion" type="range" min="0" max="8000" value="4200" step="50" />
-          <label>Spectral samples <output id="samplesReadout">31</output></label>
-          <input id="samples" type="range" min="5" max="41" value="31" step="2" />
+          <h2>Primary splitter</h2>
+          <label>Rotation <output id="splitterRotationReadout">45.0°</output></label>
+          <input id="splitterRotation" type="range" min="-85" max="85" value="45" step="0.5" />
+          <label>Reflected ratio <output id="splitRatioReadout">50%</output></label>
+          <input id="splitRatio" type="range" min="0" max="1" value="0.5" step="0.01" />
+          <div class="ratio-bar"><span id="reflectedBar"></span><span id="transmittedBar"></span></div>
+          <div class="ratio-labels"><span>Reflected</span><span>Transmitted</span></div>
+
+          <h2>Goal requirements</h2>
+          <label class="stacked-label" for="goalAColor">Goal A</label>
+          <select id="goalAColor">
+            <option value="red">Red 620–700 nm</option>
+            <option value="blue">Blue 450–495 nm</option>
+            <option value="green">Green 495–570 nm</option>
+            <option value="white">White spectrum</option>
+            <option value="any">Any light</option>
+          </select>
+          <label class="stacked-label" for="goalBColor">Goal B</label>
+          <select id="goalBColor">
+            <option value="blue">Blue 450–495 nm</option>
+            <option value="red">Red 620–700 nm</option>
+            <option value="green">Green 495–570 nm</option>
+            <option value="white">White spectrum</option>
+            <option value="any">Any light</option>
+          </select>
+          <label>Required intensity <output id="goalIntensityReadout">0.30</output></label>
+          <input id="goalIntensity" type="range" min="0.02" max="0.8" value="0.3" step="0.01" />
 
           <h2>Diagnostics</h2>
-          <label class="toggle"><input id="showNormals" type="checkbox" checked /> Show surface normals</label>
-          <label class="toggle"><input id="showHitDots" type="checkbox" checked /> Show boundary hits</label>
-          <label class="toggle"><input id="showLabels" type="checkbox" checked /> Show angle labels</label>
+          <label class="toggle"><input id="showIntensity" type="checkbox" checked /> Intensity-coded beam brightness</label>
+          <label class="toggle"><input id="showLabels" type="checkbox" checked /> Split + goal labels</label>
+          <label class="toggle"><input id="showHitDots" type="checkbox" checked /> Interaction hit points</label>
 
           <button id="reset" type="button">Reset current preset</button>
 
           <section class="law-card">
-            <span id="boundaryMode">No boundary hit</span>
-            <div class="readout-grid">
-              <div><small>θ incidence</small><strong id="incidenceValue">—</strong></div>
-              <div><small>θ transmitted</small><strong id="refractionValue">—</strong></div>
-              <div><small>n₁ → n₂</small><strong id="indexValue">—</strong></div>
-            </div>
-            <p>All values are produced by the physics module. Canvas only draws the returned segments and diagnostics.</p>
+            <span>Live goal evaluation</span>
+            <div class="goal-readout" id="goalReadout"></div>
+            <p>Goal status and intensity math come from <code>evaluateGoals()</code>. Canvas only renders the returned status.</p>
           </section>
 
           <section class="formula-card">
-            <strong>n₁ sin θ₁ = n₂ sin θ₂</strong>
-            <span>n(λ) = A + B / λ²</span>
+            <strong>Iᵣ = I × splitRatio</strong>
+            <span>Iₜ = I × (1 − splitRatio)</span>
+            <span>Branches below I = 0.02 are culled</span>
           </section>
         </aside>
       </section>
