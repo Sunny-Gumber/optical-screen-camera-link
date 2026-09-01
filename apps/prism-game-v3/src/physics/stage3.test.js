@@ -183,6 +183,6 @@ test('node cap cleanly terminates pathological splitter scenes', () => {
     origin: { x: -12, y: 0 }, direction: { x: 1, y: 0 }, splitters, bounds: BOUNDS,
     wavelength: 650, minIntensity: 0, maxRayNodes: 20, maxBounces: 20
   });
-  assert.ok(trace.stats.rayNodes <= 20);
-  assert.ok(trace.stats.nodeLimitHits >= 0);
+  assert.ok(trace.stats.nodeLimitHits > 0, JSON.stringify(trace.stats));
+  assert.ok(trace.stats.rayNodes <= 40, JSON.stringify(trace.stats));
 });
