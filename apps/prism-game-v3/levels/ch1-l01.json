@@ -1,0 +1,37 @@
+{
+  "id": "ch1-l01",
+  "name": "First Turn",
+  "chapter": "reflection-basics",
+  "difficulty": 1,
+  "boardBounds": { "width": 1200, "height": 720 },
+  "emitters": [
+    { "id": "E1", "x": 110, "y": 360, "angle": 0, "color": 650 }
+  ],
+  "pieces": [
+    {
+      "id": "M1",
+      "type": "mirror",
+      "movable": true,
+      "rotatable": true,
+      "geometry": { "a": { "x": -80, "y": 0 }, "b": { "x": 80, "y": 0 } },
+      "initialX": 520,
+      "initialY": 360,
+      "initialRotation": 45,
+      "props": {}
+    },
+    {
+      "id": "M2",
+      "type": "mirror",
+      "movable": false,
+      "rotatable": false,
+      "geometry": { "a": { "x": -70, "y": 0 }, "b": { "x": 70, "y": 0 } },
+      "initialX": 760,
+      "initialY": 560,
+      "initialRotation": 0,
+      "props": {}
+    }
+  ],
+  "goals": [
+    { "id": "G1", "x": 520, "y": 630, "shape": "circle", "size": 38, "requiredColor": "any", "requiredIntensity": 0.2 }
+  ]
+}
