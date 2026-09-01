@@ -4,83 +4,109 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
     <meta name="theme-color" content="#07111f" />
-    <title>Prism Lab V3 — Stage 4 Interaction</title>
+    <title>Prism Lab V3 — Stage 5 Level Editor</title>
   </head>
   <body>
     <main class="app-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">PRISM LAB V3 · STAGE 4</p>
-          <h1>Touch the optics</h1>
-          <p class="lede">Drag movable optics, select a piece to reveal its rotation handle, and watch the exact Stage 3 physics retrace continuously while the rendered beam eases toward each new path.</p>
+          <p class="eyebrow">PRISM LAB V3 · STAGE 5</p>
+          <h1>Level Authoring Lab</h1>
+          <p class="lede">Build JSON-backed optics puzzles, edit them with the Stage 4 interaction layer, switch into the real physics engine for play-preview, and validate solvability before a level enters the manifest.</p>
         </div>
         <div class="hero-side">
-          <div id="solvedIndicator" class="solved-indicator">SOLVED: FALSE</div>
-          <div class="metrics" aria-live="polite">
-            <div><span>Physics</span><strong id="physicsCost">0 ms</strong></div>
-            <div><span>Frame</span><strong id="frameCost">0 ms</strong></div>
-            <div><span>Ray nodes</span><strong id="rayNodeCount">0</strong></div>
+          <div class="mode-row">
+            <strong id="modeBadge" class="mode-badge edit">EDIT MODE</strong>
+            <strong id="schemaBadge" class="schema-badge bad">SCHEMA INCOMPLETE</strong>
+          </div>
+          <div class="metrics">
+            <div><span>Objects</span><strong id="objectCount">0</strong></div>
             <div><span>Segments</span><strong id="segmentCount">0</strong></div>
+            <div><span>Physics</span><strong id="physicsCost">—</strong></div>
+            <div><span>Solved</span><strong id="solvedState">FALSE</strong></div>
           </div>
         </div>
       </header>
 
-      <section class="stage-card">
-        <div class="canvas-wrap">
-          <canvas id="stage" width="1200" height="720" aria-label="Interactive optics puzzle test scene"></canvas>
-          <div class="canvas-badges">
-            <span>Pointer Events</span>
-            <span>130 ms ray smoothing</span>
-            <span>15° magnetic snap</span>
-          </div>
-          <div class="drag-hint">Drag a glowing optic · tap/click it, then drag the round rotation handle</div>
+      <section class="workspace">
+        <div class="left-column">
+          <section class="toolbar-card">
+            <div class="toolbar-head">
+              <div>
+                <span class="toolbar-label">Palette</span>
+                <small id="paletteHint">Select a type, then tap/click the board.</small>
+              </div>
+              <div class="toolbar-actions">
+                <button id="modeToggle" type="button" class="primary">▶ Play preview</button>
+                <button id="resetLevel" type="button">Reset play state</button>
+              </div>
+            </div>
+            <div id="palette" class="palette" role="toolbar" aria-label="Level editor palette">
+              <button type="button" data-palette="select" class="active">Select</button>
+              <button type="button" data-palette="emitter">Emitter</button>
+              <button type="button" data-palette="mirror">Mirror</button>
+              <button type="button" data-palette="refractor">Prism</button>
+              <button type="button" data-palette="splitter">Splitter</button>
+              <button type="button" data-palette="wall">Wall</button>
+              <button type="button" data-palette="goal">Goal</button>
+            </div>
+          </section>
+
+          <section class="canvas-card">
+            <canvas id="stage" width="1200" height="720" aria-label="Prism Lab level editor canvas"></canvas>
+            <div class="canvas-badges">
+              <span>Stage 4 interaction</span>
+              <span>15° snap</span>
+              <span id="canvasModeBadge">authoring</span>
+            </div>
+            <div id="canvasHint" class="canvas-hint">Select a palette item to place it. Drag objects to reposition; use the round handle to rotate.</div>
+          </section>
+
+          <section id="errorBox" class="error-box hidden" aria-live="polite"></section>
         </div>
 
-        <aside class="controls">
-          <section class="panel-section">
-            <h2>Interaction state</h2>
-            <div class="state-grid">
-              <span>Selected</span><strong id="selectedPiece">None</strong>
-              <span>Mode</span><strong id="interactionMode">Idle</strong>
-              <span>Pointer</span><strong id="pointerType">—</strong>
-              <span>Placement</span><strong id="placementState">Valid</strong>
+        <aside class="side-column">
+          <section class="panel">
+            <h2>Level metadata</h2>
+            <div class="form-grid two">
+              <label>Level ID<input id="levelId" type="text" value="draft-level" /></label>
+              <label>Difficulty<select id="difficulty"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+              <label class="span-2">Display name<input id="levelName" type="text" value="Untitled Prism Puzzle" /></label>
+              <label class="span-2">Chapter<input id="chapter" type="text" value="reflection-basics" /></label>
             </div>
-            <div id="snapNotice" class="snap-notice">15° snap ready</div>
           </section>
 
-          <section class="panel-section">
-            <h2>Selected piece</h2>
-            <div class="state-grid">
-              <span>Type</span><strong id="pieceType">—</strong>
-              <span>Rotation</span><strong id="pieceRotation">—</strong>
-              <span>Movable</span><strong id="pieceMovable">—</strong>
-              <span>Rotatable</span><strong id="pieceRotatable">—</strong>
+          <section class="panel">
+            <div class="panel-title-row"><h2>Selected object</h2><button id="deleteSelected" type="button" class="danger" disabled>Delete</button></div>
+            <div id="selectionEmpty" class="empty-state">Nothing selected.</div>
+            <div id="propertyFields" class="property-fields hidden"></div>
+          </section>
+
+          <section class="panel solver-panel">
+            <div class="panel-title-row"><h2>Solver / validator</h2><span id="solverState" class="status-chip">idle</span></div>
+            <div class="form-grid two compact">
+              <label>Grid step<input id="gridStep" type="number" min="40" max="300" step="10" value="120" /></label>
+              <label>Combination cap<input id="maxCombinations" type="number" min="100" max="100000" step="100" value="100000" /></label>
             </div>
-            <p class="microcopy">Locked pieces use a muted outline and padlock marker. They never enter hover/select state.</p>
+            <button id="runSolver" type="button" class="primary full">Run solver</button>
+            <pre id="solverResult" class="solver-result">No solver run yet.</pre>
           </section>
 
-          <section class="panel-section">
-            <h2>Rendering QA</h2>
-            <label class="toggle"><input id="enableSmoothing" type="checkbox" checked /> Smooth ray presentation</label>
-            <label class="toggle"><input id="showExact" type="checkbox" /> Overlay exact physics path</label>
-            <label class="toggle"><input id="showGoals" type="checkbox" checked /> Show goal diagnostics</label>
-            <button id="reset" type="button">Reset test scene</button>
+          <section class="panel json-panel">
+            <div class="panel-title-row"><h2>JSON import / export</h2><span id="jsonState" class="status-chip">draft</span></div>
+            <textarea id="jsonEditor" spellcheck="false" placeholder="Exported level JSON appears here. You can also paste JSON here and import it."></textarea>
+            <div class="button-grid">
+              <button id="importJson" type="button">Import JSON</button>
+              <button id="exportJson" type="button">Export JSON</button>
+              <button id="copyJson" type="button">Copy</button>
+              <button id="downloadJson" type="button">Download .json</button>
+            </div>
+            <button id="clearLevel" type="button" class="danger subtle full">Clear editor</button>
           </section>
 
-          <section class="panel-section phone-card">
-            <h2>Phone QA</h2>
-            <p>Use a real phone before merge: tap a movable optic, drag it, then use the circular handle to rotate. The canvas suppresses page scroll/zoom while manipulating a piece and uses a larger touch hit radius.</p>
-          </section>
-
-          <section class="panel-section">
-            <h2>Goal evaluation</h2>
-            <div id="goalReadout" class="goal-readout"></div>
-          </section>
-
-          <section class="formula-card">
-            <strong>Exact physics stays instant</strong>
-            <span>Only Canvas ray endpoints interpolate.</span>
-            <span>Invalid moves never alter the physics state.</span>
+          <section class="panel help-panel">
+            <h2>Stage 5 QA targets</h2>
+            <p>Build from scratch, export/reimport, run solvable and impossible cases, test malformed JSON, force the solver cap, toggle edit/play repeatedly, then verify reset restores the authored state.</p>
           </section>
         </aside>
       </section>
