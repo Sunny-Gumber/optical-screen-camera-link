@@ -2,100 +2,85 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
     <meta name="theme-color" content="#07111f" />
-    <title>Prism Lab V3 — Stage 3 Splitters & Goals</title>
+    <title>Prism Lab V3 — Stage 4 Interaction</title>
   </head>
   <body>
     <main class="app-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">PRISM LAB V3 · PHYSICS CORE</p>
-          <h1>Splitters & Goals</h1>
-          <p class="lede">Stage 3 diagnostic scene: branching ray trees, intensity attenuation, color-aware goal evaluation, and simultaneous win detection.</p>
+          <p class="eyebrow">PRISM LAB V3 · STAGE 4</p>
+          <h1>Touch the optics</h1>
+          <p class="lede">Drag movable optics, select a piece to reveal its rotation handle, and watch the exact Stage 3 physics retrace continuously while the rendered beam eases toward each new path.</p>
         </div>
         <div class="hero-side">
           <div id="solvedIndicator" class="solved-indicator">SOLVED: FALSE</div>
           <div class="metrics" aria-live="polite">
-            <div><span>Segments</span><strong id="segmentCount">0</strong></div>
-            <div><span>Ray nodes</span><strong id="rayNodeCount">0</strong></div>
-            <div><span>Culled</span><strong id="culledCount">0</strong></div>
+            <div><span>Physics</span><strong id="physicsCost">0 ms</strong></div>
             <div><span>Frame</span><strong id="frameCost">0 ms</strong></div>
+            <div><span>Ray nodes</span><strong id="rayNodeCount">0</strong></div>
+            <div><span>Segments</span><strong id="segmentCount">0</strong></div>
           </div>
         </div>
       </header>
 
       <section class="stage-card">
         <div class="canvas-wrap">
-          <canvas id="stage" width="1200" height="720" aria-label="Beam splitter and goal diagnostic scene"></canvas>
-          <div class="drag-hint">Drag the highlighted splitter · rotate and change ratio from the panel</div>
+          <canvas id="stage" width="1200" height="720" aria-label="Interactive optics puzzle test scene"></canvas>
+          <div class="canvas-badges">
+            <span>Pointer Events</span>
+            <span>130 ms ray smoothing</span>
+            <span>15° magnetic snap</span>
+          </div>
+          <div class="drag-hint">Drag a glowing optic · tap/click it, then drag the round rotation handle</div>
         </div>
 
         <aside class="controls">
-          <h2>QA preset</h2>
-          <select id="preset">
-            <option value="dual">Basic split · two goals</option>
-            <option value="chain">Splitter chain · culling</option>
-            <option value="attenuation">Attenuation threshold</option>
-            <option value="spectrum">White goal via prism spectrum</option>
-          </select>
+          <section class="panel-section">
+            <h2>Interaction state</h2>
+            <div class="state-grid">
+              <span>Selected</span><strong id="selectedPiece">None</strong>
+              <span>Mode</span><strong id="interactionMode">Idle</strong>
+              <span>Pointer</span><strong id="pointerType">—</strong>
+              <span>Placement</span><strong id="placementState">Valid</strong>
+            </div>
+            <div id="snapNotice" class="snap-notice">15° snap ready</div>
+          </section>
 
-          <h2>Emitter</h2>
-          <label class="stacked-label" for="wavelength">Light</label>
-          <select id="wavelength">
-            <option value="650">650 nm red</option>
-            <option value="450">450 nm blue</option>
-            <option value="550">550 nm green</option>
-            <option value="white">White / full spectrum</option>
-          </select>
-          <label>Input intensity <output id="emitterIntensityReadout">1.00</output></label>
-          <input id="emitterIntensity" type="range" min="0.05" max="1" value="1" step="0.01" />
+          <section class="panel-section">
+            <h2>Selected piece</h2>
+            <div class="state-grid">
+              <span>Type</span><strong id="pieceType">—</strong>
+              <span>Rotation</span><strong id="pieceRotation">—</strong>
+              <span>Movable</span><strong id="pieceMovable">—</strong>
+              <span>Rotatable</span><strong id="pieceRotatable">—</strong>
+            </div>
+            <p class="microcopy">Locked pieces use a muted outline and padlock marker. They never enter hover/select state.</p>
+          </section>
 
-          <h2>Primary splitter</h2>
-          <label>Rotation <output id="splitterRotationReadout">45.0°</output></label>
-          <input id="splitterRotation" type="range" min="-85" max="85" value="45" step="0.5" />
-          <label>Reflected ratio <output id="splitRatioReadout">50%</output></label>
-          <input id="splitRatio" type="range" min="0" max="1" value="0.5" step="0.01" />
-          <div class="ratio-bar"><span id="reflectedBar"></span><span id="transmittedBar"></span></div>
-          <div class="ratio-labels"><span>Reflected</span><span>Transmitted</span></div>
+          <section class="panel-section">
+            <h2>Rendering QA</h2>
+            <label class="toggle"><input id="enableSmoothing" type="checkbox" checked /> Smooth ray presentation</label>
+            <label class="toggle"><input id="showExact" type="checkbox" /> Overlay exact physics path</label>
+            <label class="toggle"><input id="showGoals" type="checkbox" checked /> Show goal diagnostics</label>
+            <button id="reset" type="button">Reset test scene</button>
+          </section>
 
-          <h2>Goal requirements</h2>
-          <label class="stacked-label" for="goalAColor">Goal A</label>
-          <select id="goalAColor">
-            <option value="red">Red 620–700 nm</option>
-            <option value="blue">Blue 450–495 nm</option>
-            <option value="green">Green 495–570 nm</option>
-            <option value="white">White spectrum</option>
-            <option value="any">Any light</option>
-          </select>
-          <label class="stacked-label" for="goalBColor">Goal B</label>
-          <select id="goalBColor">
-            <option value="blue">Blue 450–495 nm</option>
-            <option value="red">Red 620–700 nm</option>
-            <option value="green">Green 495–570 nm</option>
-            <option value="white">White spectrum</option>
-            <option value="any">Any light</option>
-          </select>
-          <label>Required intensity <output id="goalIntensityReadout">0.30</output></label>
-          <input id="goalIntensity" type="range" min="0.02" max="0.8" value="0.3" step="0.01" />
+          <section class="panel-section phone-card">
+            <h2>Phone QA</h2>
+            <p>Use a real phone before merge: tap a movable optic, drag it, then use the circular handle to rotate. The canvas suppresses page scroll/zoom while manipulating a piece and uses a larger touch hit radius.</p>
+          </section>
 
-          <h2>Diagnostics</h2>
-          <label class="toggle"><input id="showIntensity" type="checkbox" checked /> Intensity-coded beam brightness</label>
-          <label class="toggle"><input id="showLabels" type="checkbox" checked /> Split + goal labels</label>
-          <label class="toggle"><input id="showHitDots" type="checkbox" checked /> Interaction hit points</label>
-
-          <button id="reset" type="button">Reset current preset</button>
-
-          <section class="law-card">
-            <span>Live goal evaluation</span>
-            <div class="goal-readout" id="goalReadout"></div>
-            <p>Goal status and intensity math come from <code>evaluateGoals()</code>. Canvas only renders the returned status.</p>
+          <section class="panel-section">
+            <h2>Goal evaluation</h2>
+            <div id="goalReadout" class="goal-readout"></div>
           </section>
 
           <section class="formula-card">
-            <strong>Iᵣ = I × splitRatio</strong>
-            <span>Iₜ = I × (1 − splitRatio)</span>
-            <span>Branches below I = 0.02 are culled</span>
+            <strong>Exact physics stays instant</strong>
+            <span>Only Canvas ray endpoints interpolate.</span>
+            <span>Invalid moves never alter the physics state.</span>
           </section>
         </aside>
       </section>
