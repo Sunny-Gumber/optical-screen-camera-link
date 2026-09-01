@@ -48,14 +48,14 @@ const PRESETS = {
   },
   spectrum: {
     emitter: { x: 110, y: 350, angle: 0, wavelength: null, intensity: 1 },
-    primary: { id: 'S1', x: 335, y: 350, length: 250, rotation: 0, splitRatio: 0.08, draggable: true },
+    primary: { id: 'S1', x: 335, y: 350, length: 250, rotation: 45, splitRatio: 0.08, draggable: true },
     extraSplitters: [],
     refractors: [{
       id: 'P1', x: 590, y: 350, rotation: 0,
       vertices: [{ x: -90, y: -145 }, { x: -90, y: 145 }, { x: 130, y: 0 }],
       refractiveIndexBase: 1.52, dispersionCoefficient: 4200
     }],
-    goals: [{ id: 'A', shape: 'rect', x: 940, y: 350, width: 90, height: 330, requiredColor: 'white' }]
+    goals: [{ id: 'A', shape: 'rect', x: 825, y: 160, width: 110, height: 280, requiredColor: 'white' }]
   }
 };
 
