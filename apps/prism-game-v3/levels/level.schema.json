@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prism-lab.local/schemas/level.schema.json",
+  "title": "Prism Lab Level",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "chapter", "difficulty", "boardBounds", "emitters", "pieces", "goals"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "chapter": { "type": "string", "minLength": 1 },
+    "difficulty": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "boardBounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "emitters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "x", "y", "angle", "color"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "angle": { "type": "number" },
+          "color": {
+            "oneOf": [
+              { "const": "white" },
+              { "type": "number", "minimum": 400, "maximum": 700 }
+            ]
+          }
+        }
+      }
+    },
+    "pieces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "movable", "rotatable", "geometry", "initialX", "initialY", "initialRotation", "props"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["mirror", "refractor", "splitter", "wall"] },
+          "movable": { "type": "boolean" },
+          "rotatable": { "type": "boolean" },
+          "geometry": { "type": "object" },
+          "initialX": { "type": "number" },
+          "initialY": { "type": "number" },
+          "initialRotation": { "type": "number" },
+          "props": { "type": "object" }
+        }
+      }
+    },
+    "goals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "x", "y", "shape", "size", "requiredColor", "requiredIntensity"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "shape": { "enum": ["circle", "rect"] },
+          "size": { "type": "number", "exclusiveMinimum": 0 },
+          "requiredColor": {
+            "oneOf": [
+              { "enum": ["any", "white"] },
+              {
+                "type": "array", "minItems": 2, "maxItems": 2,
+                "items": { "type": "number", "minimum": 400, "maximum": 700 }
+              },
+              {
+                "type": "object", "required": ["min", "max"], "additionalProperties": false,
+                "properties": {
+                  "min": { "type": "number", "minimum": 400, "maximum": 700 },
+                  "max": { "type": "number", "minimum": 400, "maximum": 700 }
+                }
+              }
+            ]
+          },
+          "requiredIntensity": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
