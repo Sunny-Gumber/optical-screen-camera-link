@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "chapters": [
+    {
+      "id": "reflection-basics",
+      "name": "Reflection Basics",
+      "levels": ["ch1-l01.json"]
+    }
+  ]
+}
