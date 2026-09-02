@@ -16,15 +16,29 @@ function uniquePositions(values) {
   });
 }
 
+function opticalLandmarkPositions(piece, runtime) {
+  const values = [];
+  if (piece.type === 'lens' && Number.isFinite(piece.focalLength)) {
+    for (const goal of runtime.goals ?? []) {
+      values.push({ x: goal.x - piece.focalLength, y: goal.y });
+      values.push({ x: goal.x + piece.focalLength, y: goal.y });
+    }
+  }
+  return values;
+}
+
 function candidatePositions(piece, runtime, gridStep) {
   if (!piece.movable) return [{ x: piece.x, y: piece.y }];
-  const values = [{ x: piece.x, y: piece.y }];
+  const values = [
+    { x: piece.x, y: piece.y },
+    ...opticalLandmarkPositions(piece, runtime)
+  ];
   for (let y = gridStep / 2; y < runtime.boardBounds.height; y += gridStep) {
     for (let x = gridStep / 2; x < runtime.boardBounds.width; x += gridStep) {
       if (isPieceInsideBounds(piece, runtime.bounds, { x, y, rotation: piece.rotation })) values.push({ x, y });
     }
   }
-  return uniquePositions(values);
+  return uniquePositions(values).filter((position) => isPieceInsideBounds(piece, runtime.bounds, { ...position, rotation: piece.rotation }));
 }
 
 function candidateRotations(piece) {

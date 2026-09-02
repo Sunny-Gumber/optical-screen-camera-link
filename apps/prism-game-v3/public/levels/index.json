@@ -1,53 +1,64 @@
 {
-  "version": 2,
+  "version": 3,
   "chapters": [
     {
       "id": "concentration-foundations",
       "name": "Concentration Foundations",
       "synthesisLevel": "c1-l03",
       "levels": [
-        {
-          "id": "c1-l01",
-          "file": "c1-l01.json",
-          "name": "Catch the Beam",
-          "difficulty": 1,
-          "starThresholds": { "one": 95, "two": 98, "three": 99.5 }
-        },
-        {
-          "id": "c1-l02",
-          "file": "c1-l02.json",
-          "name": "Find the Focus",
-          "difficulty": 1,
-          "starThresholds": { "one": 95, "two": 98, "three": 99.5 }
-        },
-        {
-          "id": "c1-l03",
-          "file": "c1-l03.json",
-          "name": "Reflect & Focus",
-          "difficulty": 2,
-          "starThresholds": { "one": 95, "two": 98, "three": 99.5 }
-        }
+        { "id": "c1-l01", "file": "c1-l01.json", "name": "Catch the Beam", "difficulty": 1, "starThresholds": { "one": 95, "two": 98, "three": 99.5 } },
+        { "id": "c1-l02", "file": "c1-l02.json", "name": "Find the Focus", "difficulty": 1, "starThresholds": { "one": 95, "two": 98, "three": 99.5 } },
+        { "id": "c1-l03", "file": "c1-l03.json", "name": "Reflect & Focus", "difficulty": 2, "starThresholds": { "one": 95, "two": 98, "three": 99.5 } }
       ]
     },
     {
       "id": "precision-control",
       "name": "Precision Control",
-      "synthesisLevel": "c2-l02",
+      "synthesisLevel": "c2-l03",
       "levels": [
-        {
-          "id": "c2-l01",
-          "file": "c2-l01.json",
-          "name": "Move the Focal Plane",
-          "difficulty": 2,
-          "starThresholds": { "one": 95, "two": 98, "three": 99.5 }
-        },
-        {
-          "id": "c2-l02",
-          "file": "c2-l02.json",
-          "name": "Precision Torch",
-          "difficulty": 3,
-          "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 }
-        }
+        { "id": "c2-l01", "file": "c2-l01.json", "name": "Move the Focal Plane", "difficulty": 2, "starThresholds": { "one": 95, "two": 98, "three": 99.5 } },
+        { "id": "c2-l02", "file": "c2-l02.json", "name": "Precision Torch", "difficulty": 3, "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 } },
+        { "id": "c2-l03", "file": "c2-l03.json", "name": "Precision Synthesis", "difficulty": 3, "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 } }
+      ]
+    },
+    {
+      "id": "reflector-lens",
+      "name": "Reflector + Lens",
+      "synthesisLevel": "c3-l03",
+      "levels": [
+        { "id": "c3-l01", "file": "c3-l01.json", "name": "Long Focus", "difficulty": 2, "starThresholds": { "one": 95, "two": 98, "three": 99.5 } },
+        { "id": "c3-l02", "file": "c3-l02.json", "name": "Short Focus", "difficulty": 3, "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 } },
+        { "id": "c3-l03", "file": "c3-l03.json", "name": "Dual Alignment", "difficulty": 3, "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 } }
+      ]
+    },
+    {
+      "id": "multiple-sources",
+      "name": "Multiple Sources",
+      "synthesisLevel": "c4-l03",
+      "levels": [
+        { "id": "c4-l01", "file": "c4-l01.json", "name": "Two Colors, One Focus", "difficulty": 3, "starThresholds": { "one": 95, "two": 98, "three": 99.5 } },
+        { "id": "c4-l02", "file": "c4-l02.json", "name": "Shared Reflector", "difficulty": 3, "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 } },
+        { "id": "c4-l03", "file": "c4-l03.json", "name": "Spectrum Synthesis", "difficulty": 4, "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 } }
+      ]
+    },
+    {
+      "id": "obstacles",
+      "name": "Obstacles & Off-Axis",
+      "synthesisLevel": "c5-l03",
+      "levels": [
+        { "id": "c5-l01", "file": "c5-l01.json", "name": "Thread the Gap", "difficulty": 3, "starThresholds": { "one": 95, "two": 98, "three": 99.5 } },
+        { "id": "c5-l02", "file": "c5-l02.json", "name": "Off-Axis Trap", "difficulty": 4, "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 } },
+        { "id": "c5-l03", "file": "c5-l03.json", "name": "Narrow Window", "difficulty": 4, "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 } }
+      ]
+    },
+    {
+      "id": "full-synthesis",
+      "name": "Full Synthesis",
+      "synthesisLevel": "c6-l03",
+      "levels": [
+        { "id": "c6-l01", "file": "c6-l01.json", "name": "High Efficiency", "difficulty": 4, "starThresholds": { "one": 96, "two": 98.5, "three": 99.7 } },
+        { "id": "c6-l02", "file": "c6-l02.json", "name": "Precision Channel", "difficulty": 5, "starThresholds": { "one": 96, "two": 99, "three": 99.8 } },
+        { "id": "c6-l03", "file": "c6-l03.json", "name": "Master Optician", "difficulty": 5, "starThresholds": { "one": 97, "two": 99, "three": 99.8 } }
       ]
     }
   ]

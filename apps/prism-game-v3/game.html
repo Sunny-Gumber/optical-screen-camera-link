@@ -2,17 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#06101b" />
-    <title>Prism Lab V3 — Play</title>
+    <title>Prism Lab V3 — Campaign</title>
   </head>
   <body>
+    <a class="sr-only" href="#levelSelectScreen">Skip to campaign</a>
     <main class="game-shell">
       <header class="game-hero">
         <div>
-          <p class="eyebrow">PRISM LAB V3 · STAGE 7</p>
-          <h1>Concentration Campaign</h1>
-          <p class="lede">Shape diffuse light, unlock each optical challenge, and improve your best concentration score.</p>
+          <p class="eyebrow">PRISM LAB V3 · STAGE 8</p>
+          <h1>Optics Campaign</h1>
+          <p class="lede">Shape diffuse light through six chapters, master reflectors and lenses, and improve your best concentration score.</p>
         </div>
         <div class="hero-actions">
           <button id="continueButton" class="primary">Continue</button>
@@ -22,10 +23,24 @@
 
       <div id="storageWarning" class="warning hidden" role="status"></div>
 
-      <section id="levelSelectScreen" class="screen">
+      <div class="a11y-bar" aria-label="Accessibility controls">
+        <label class="motion-toggle"><input id="reduceMotionToggle" type="checkbox" /> Reduce motion</label>
+        <button id="keyboardHelpButton" type="button" aria-expanded="false" aria-controls="keyboardHelp">Keyboard controls</button>
+      </div>
+      <div id="keyboardHelp" class="keyboard-help hidden" tabindex="-1">
+        <strong>Keyboard play:</strong>
+        <kbd>[</kbd>/<kbd>]</kbd> select an interactive optic,
+        <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> move it,
+        hold <kbd>Shift</kbd> for fine movement,
+        <kbd>Q</kbd>/<kbd>E</kbd> rotate by 15°,
+        <kbd>R</kbd> reset, <kbd>Esc</kbd> return to levels.
+      </div>
+      <div id="accessibilityStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+      <section id="levelSelectScreen" class="screen" tabindex="-1">
         <div class="screen-heading">
           <div><span class="kicker">Campaign</span><h2>Choose a level</h2></div>
-          <div id="progressSummary" class="summary-chip">0 / 5 completed</div>
+          <div id="progressSummary" class="summary-chip">0 / 18 completed</div>
         </div>
         <div id="chapterList" class="chapter-list"></div>
       </section>
@@ -43,19 +58,19 @@
 
         <div class="play-heading">
           <div><span id="levelNumber" class="kicker"></span><h2 id="levelTitle"></h2></div>
-          <div id="liveConcentration" class="concentration-badge">0.00%</div>
+          <div id="liveConcentration" class="concentration-badge" role="status" aria-live="polite">0.00%</div>
         </div>
 
         <div class="play-grid">
           <section class="canvas-card">
-            <canvas id="gameCanvas" width="1200" height="720" aria-label="Optics puzzle board"></canvas>
-            <div class="canvas-overlay"><span id="rayCountBadge">full rays</span><span>15° magnetic snap</span></div>
+            <canvas id="gameCanvas" width="1200" height="720" tabindex="0" aria-label="Optics puzzle board" aria-describedby="keyboardHelp" aria-keyshortcuts="[ ] ArrowLeft ArrowRight ArrowUp ArrowDown Q E R Escape"></canvas>
+            <div class="canvas-overlay"><span id="rayCountBadge">full rays</span><span>15° magnetic snap</span><span>Keyboard ready</span></div>
             <div id="solvePulse" class="solve-pulse"></div>
           </section>
           <aside class="telemetry">
             <section class="panel">
               <h3>Goal</h3>
-              <div class="meter"><div id="meterFill" class="meter-fill"></div><i id="thresholdMarker"></i></div>
+              <div class="meter" aria-hidden="true"><div id="meterFill" class="meter-fill"></div><i id="thresholdMarker"></i></div>
               <div class="metric-row"><span>Concentration</span><strong id="concentrationReadout">0.00%</strong></div>
               <div class="metric-row"><span>Required</span><strong id="requiredReadout">95%</strong></div>
               <div class="metric-row"><span>Moves</span><strong id="movesReadout">0</strong></div>
@@ -69,7 +84,7 @@
             </section>
             <section class="panel tip-panel">
               <h3>How to play</h3>
-              <p>Drag glowing movable optics. Select a rotatable piece and use its round handle. Push the live concentration above the marked threshold.</p>
+              <p>Drag glowing movable optics or focus the board and use the keyboard controls. Select a rotatable piece and use its round handle, or Q/E on a keyboard. Push the live concentration above the marked threshold.</p>
             </section>
           </aside>
         </div>
@@ -92,5 +107,6 @@
     </div>
 
     <script type="module" src="/src/game.js"></script>
+    <script type="module" src="/src/accessibility/gameAccessibility.js"></script>
   </body>
 </html>
