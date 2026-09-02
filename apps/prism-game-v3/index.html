@@ -4,15 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
     <meta name="theme-color" content="#07111f" />
-    <title>Prism Lab V3 — Stage 5 Level Editor</title>
+    <title>Prism Lab V3 — Level Authoring Lab</title>
   </head>
   <body>
     <main class="app-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">PRISM LAB V3 · STAGE 5</p>
+          <p class="eyebrow">PRISM LAB V3 · STAGE 5+6 AUTHORING</p>
           <h1>Level Authoring Lab</h1>
-          <p class="lede">Build JSON-backed optics puzzles, edit them with the Stage 4 interaction layer, switch into the real physics engine for play-preview, and validate solvability before a level enters the manifest.</p>
+          <p class="lede">Build JSON-backed optics puzzles with mirrors, prisms, diffuse light sources, lenses, parabolic reflectors and concentration goals; switch into the real physics engine and validate solvability before a level enters the manifest.</p>
         </div>
         <div class="hero-side">
           <div class="mode-row">
@@ -37,16 +37,20 @@
                 <small id="paletteHint">Select a type, then tap/click the board.</small>
               </div>
               <div class="toolbar-actions">
+                <a href="./stage6.html" class="button-link">Stage 6 physics lab</a>
                 <button id="modeToggle" type="button" class="primary">▶ Play preview</button>
                 <button id="resetLevel" type="button">Reset play state</button>
               </div>
             </div>
             <div id="palette" class="palette" role="toolbar" aria-label="Level editor palette">
               <button type="button" data-palette="select" class="active">Select</button>
-              <button type="button" data-palette="emitter">Emitter</button>
+              <button type="button" data-palette="emitter">Laser</button>
+              <button type="button" data-palette="lightSource">Diffuse source</button>
               <button type="button" data-palette="mirror">Mirror</button>
               <button type="button" data-palette="refractor">Prism</button>
               <button type="button" data-palette="splitter">Splitter</button>
+              <button type="button" data-palette="lens">Lens</button>
+              <button type="button" data-palette="reflector">Reflector</button>
               <button type="button" data-palette="wall">Wall</button>
               <button type="button" data-palette="goal">Goal</button>
             </div>
@@ -72,7 +76,7 @@
               <label>Level ID<input id="levelId" type="text" value="draft-level" /></label>
               <label>Difficulty<select id="difficulty"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
               <label class="span-2">Display name<input id="levelName" type="text" value="Untitled Prism Puzzle" /></label>
-              <label class="span-2">Chapter<input id="chapter" type="text" value="reflection-basics" /></label>
+              <label class="span-2">Chapter<input id="chapter" type="text" value="concentration-basics" /></label>
             </div>
           </section>
 
@@ -105,8 +109,8 @@
           </section>
 
           <section class="panel help-panel">
-            <h2>Stage 5 QA targets</h2>
-            <p>Build from scratch, export/reimport, run solvable and impossible cases, test malformed JSON, force the solver cap, toggle edit/play repeatedly, then verify reset restores the authored state.</p>
+            <h2>Authoring QA</h2>
+            <p>Legacy levels remain valid. New concentration levels can use diffuse sources, lenses and parabolic reflectors. The solver runs the same runtime path used by play preview.</p>
           </section>
         </aside>
       </section>
