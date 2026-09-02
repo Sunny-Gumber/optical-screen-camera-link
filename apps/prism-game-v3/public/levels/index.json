@@ -1,10 +1,54 @@
 {
-  "version": 1,
+  "version": 2,
   "chapters": [
     {
-      "id": "reflection-basics",
-      "name": "Reflection Basics",
-      "levels": ["ch1-l01.json"]
+      "id": "concentration-foundations",
+      "name": "Concentration Foundations",
+      "synthesisLevel": "c1-l03",
+      "levels": [
+        {
+          "id": "c1-l01",
+          "file": "c1-l01.json",
+          "name": "Catch the Beam",
+          "difficulty": 1,
+          "starThresholds": { "one": 95, "two": 98, "three": 99.5 }
+        },
+        {
+          "id": "c1-l02",
+          "file": "c1-l02.json",
+          "name": "Find the Focus",
+          "difficulty": 1,
+          "starThresholds": { "one": 95, "two": 98, "three": 99.5 }
+        },
+        {
+          "id": "c1-l03",
+          "file": "c1-l03.json",
+          "name": "Reflect & Focus",
+          "difficulty": 2,
+          "starThresholds": { "one": 95, "two": 98, "three": 99.5 }
+        }
+      ]
+    },
+    {
+      "id": "precision-control",
+      "name": "Precision Control",
+      "synthesisLevel": "c2-l02",
+      "levels": [
+        {
+          "id": "c2-l01",
+          "file": "c2-l01.json",
+          "name": "Move the Focal Plane",
+          "difficulty": 2,
+          "starThresholds": { "one": 95, "two": 98, "three": 99.5 }
+        },
+        {
+          "id": "c2-l02",
+          "file": "c2-l02.json",
+          "name": "Precision Torch",
+          "difficulty": 3,
+          "starThresholds": { "one": 95, "two": 98.5, "three": 99.7 }
+        }
+      ]
     }
   ]
 }
