@@ -25,19 +25,28 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "x", "y", "angle", "color"],
+        "required": ["id", "x", "y", "color"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["emitter", "lightSource"] },
           "x": { "type": "number" },
           "y": { "type": "number" },
           "angle": { "type": "number" },
+          "centerDirection": { "type": "number" },
+          "coneAngle": { "type": "number", "minimum": 0, "maximum": 360 },
+          "rayCount": { "type": "integer", "minimum": 1, "maximum": 1000 },
+          "totalEnergy": { "type": "number", "exclusiveMinimum": 0 },
           "color": {
             "oneOf": [
               { "const": "white" },
               { "type": "number", "minimum": 400, "maximum": 700 }
             ]
           }
-        }
+        },
+        "anyOf": [
+          { "required": ["angle"] },
+          { "properties": { "type": { "const": "lightSource" } }, "required": ["type", "centerDirection", "coneAngle", "rayCount", "totalEnergy"] }
+        ]
       }
     },
     "pieces": {
@@ -48,7 +57,7 @@
         "required": ["id", "type", "movable", "rotatable", "geometry", "initialX", "initialY", "initialRotation", "props"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
-          "type": { "enum": ["mirror", "refractor", "splitter", "wall"] },
+          "type": { "enum": ["mirror", "refractor", "splitter", "wall", "lens", "reflector"] },
           "movable": { "type": "boolean" },
           "rotatable": { "type": "boolean" },
           "geometry": { "type": "object" },
@@ -65,7 +74,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "x", "y", "shape", "size", "requiredColor", "requiredIntensity"],
+        "required": ["id", "x", "y", "shape", "size"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "x": { "type": "number" },
@@ -75,10 +84,7 @@
           "requiredColor": {
             "oneOf": [
               { "enum": ["any", "white"] },
-              {
-                "type": "array", "minItems": 2, "maxItems": 2,
-                "items": { "type": "number", "minimum": 400, "maximum": 700 }
-              },
+              { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number", "minimum": 400, "maximum": 700 } },
               {
                 "type": "object", "required": ["min", "max"], "additionalProperties": false,
                 "properties": {
@@ -88,8 +94,13 @@
               }
             ]
           },
-          "requiredIntensity": { "type": "number", "minimum": 0 }
-        }
+          "requiredIntensity": { "type": "number", "minimum": 0 },
+          "requiredConcentration": { "type": "number", "minimum": 0, "maximum": 100 }
+        },
+        "anyOf": [
+          { "required": ["requiredIntensity"] },
+          { "required": ["requiredConcentration"] }
+        ]
       }
     }
   }
