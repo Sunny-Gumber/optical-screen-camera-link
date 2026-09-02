@@ -2,7 +2,9 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - preview/prism-v3-stage6
   workflow_dispatch:
 
 permissions:
@@ -21,17 +23,39 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm test
+          node-version: 22
+      - name: Run repository tests
+        run: npm test
+      - name: Test and build Prism V3 Stage 6 preview
+        if: github.ref == 'refs/heads/preview/prism-v3-stage6'
+        working-directory: apps/prism-game-v3
+        run: |
+          npm install
+          npm test
+          npm run build
 
   deploy:
     needs: test
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: github.ref == 'refs/heads/preview/prism-v3-stage6'
+        with:
+          node-version: 22
+      - name: Build Stage 6 browser preview
+        if: github.ref == 'refs/heads/preview/prism-v3-stage6'
+        working-directory: apps/prism-game-v3
+        run: |
+          npm install
+          npm run build
+      - name: Place Stage 6 preview at static subpath
+        if: github.ref == 'refs/heads/preview/prism-v3-stage6'
+        run: |
+          rm -rf prism-v3-stage6-preview
+          mkdir -p prism-v3-stage6-preview
+          cp -R apps/prism-game-v3/dist/. prism-v3-stage6-preview/
+          rm -rf apps/prism-game-v3/node_modules
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
