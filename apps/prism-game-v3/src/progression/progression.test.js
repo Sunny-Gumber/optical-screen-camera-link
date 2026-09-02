@@ -112,7 +112,7 @@ test('legacy versionless save migrates to version 1', () => {
   assert.equal(migrated.starsPerLevel['ch1-l01'], 2);
 });
 
-test('unavailable localStorage falls back to in-memory session state', () => {
+test('unavailable storage methods fall back to in-memory session state', () => {
   let warnings = 0;
   const broken = {
     getItem() { throw new Error('blocked'); },
@@ -126,6 +126,26 @@ test('unavailable localStorage falls back to in-memory session state', () => {
   assert.equal(save.completedLevels.includes('ch1-l01'), true);
   assert.equal(store.isPersistent(), false);
   assert.equal(warnings, 1);
+});
+
+test('a throwing global localStorage getter is caught before app initialization fails', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  let warnings = 0;
+  try {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() { throw new DOMException('blocked', 'SecurityError'); }
+    });
+    const store = createProgressStore({ manifest, onWarning: () => { warnings += 1; } });
+    assert.doesNotThrow(() => store.loadSave());
+    store.saveProgress('ch1-l01', { finalConcentration: 96 }, { one: 95, two: 98, three: 99.5 });
+    assert.equal(store.loadSave().completedLevels.includes('ch1-l01'), true);
+    assert.equal(store.isPersistent(), false);
+    assert.equal(warnings, 1);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'localStorage', descriptor);
+    else delete globalThis.localStorage;
+  }
 });
 
 test('bestContinueLevel resolves current or first unlocked incomplete level', () => {
