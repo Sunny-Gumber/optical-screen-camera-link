@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta name="theme-color" content="#06101b" />
+    <title>Prism Lab V3 — Play</title>
+  </head>
+  <body>
+    <main class="game-shell">
+      <header class="game-hero">
+        <div>
+          <p class="eyebrow">PRISM LAB V3 · STAGE 7</p>
+          <h1>Concentration Campaign</h1>
+          <p class="lede">Shape diffuse light, unlock each optical challenge, and improve your best concentration score.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="continueButton" class="primary">Continue</button>
+          <button id="resetProgressButton">Reset progress</button>
+        </div>
+      </header>
+
+      <div id="storageWarning" class="warning hidden" role="status"></div>
+
+      <section id="levelSelectScreen" class="screen">
+        <div class="screen-heading">
+          <div><span class="kicker">Campaign</span><h2>Choose a level</h2></div>
+          <div id="progressSummary" class="summary-chip">0 / 5 completed</div>
+        </div>
+        <div id="chapterList" class="chapter-list"></div>
+      </section>
+
+      <section id="playScreen" class="screen hidden">
+        <div class="play-toolbar">
+          <div>
+            <button id="backToLevels">← Levels</button>
+            <span id="chapterLabel" class="chapter-label"></span>
+          </div>
+          <div class="play-actions">
+            <button id="resetLevel">Reset level</button>
+          </div>
+        </div>
+
+        <div class="play-heading">
+          <div><span id="levelNumber" class="kicker"></span><h2 id="levelTitle"></h2></div>
+          <div id="liveConcentration" class="concentration-badge">0.00%</div>
+        </div>
+
+        <div class="play-grid">
+          <section class="canvas-card">
+            <canvas id="gameCanvas" width="1200" height="720" aria-label="Optics puzzle board"></canvas>
+            <div class="canvas-overlay"><span id="rayCountBadge">full rays</span><span>15° magnetic snap</span></div>
+            <div id="solvePulse" class="solve-pulse"></div>
+          </section>
+          <aside class="telemetry">
+            <section class="panel">
+              <h3>Goal</h3>
+              <div class="meter"><div id="meterFill" class="meter-fill"></div><i id="thresholdMarker"></i></div>
+              <div class="metric-row"><span>Concentration</span><strong id="concentrationReadout">0.00%</strong></div>
+              <div class="metric-row"><span>Required</span><strong id="requiredReadout">95%</strong></div>
+              <div class="metric-row"><span>Moves</span><strong id="movesReadout">0</strong></div>
+            </section>
+            <section class="panel">
+              <h3>Energy</h3>
+              <div class="metric-row"><span>Emitted</span><strong id="emittedReadout">100.0%</strong></div>
+              <div class="metric-row"><span>Goal</span><strong id="goalEnergyReadout">0.0%</strong></div>
+              <div class="metric-row"><span>Absorbed</span><strong id="absorbedReadout">0.0%</strong></div>
+              <div class="metric-row"><span>Escaped / loss</span><strong id="lostReadout">0.0%</strong></div>
+            </section>
+            <section class="panel tip-panel">
+              <h3>How to play</h3>
+              <p>Drag glowing movable optics. Select a rotatable piece and use its round handle. Push the live concentration above the marked threshold.</p>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <div id="completionOverlay" class="completion-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="completionTitle">
+      <div class="completion-card">
+        <span class="kicker">LEVEL COMPLETE</span>
+        <h2 id="completionTitle">Focused!</h2>
+        <div id="completionPercent" class="completion-percent">100.0%</div>
+        <div id="completionStars" class="completion-stars" aria-label="Stars earned">★★★</div>
+        <p id="completionBest"></p>
+        <div class="completion-actions">
+          <button id="nextLevelButton" class="primary">Next level</button>
+          <button id="replayButton">Replay</button>
+          <button id="completionLevelsButton">Level select</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/game.js"></script>
+  </body>
+</html>

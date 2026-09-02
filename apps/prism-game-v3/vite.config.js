@@ -7,7 +7,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         editor: resolve(process.cwd(), 'index.html'),
-        stage6: resolve(process.cwd(), 'stage6.html')
+        stage6: resolve(process.cwd(), 'stage6.html'),
+        game: resolve(process.cwd(), 'game.html')
       }
     }
   }
