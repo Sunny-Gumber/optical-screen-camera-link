@@ -63,10 +63,25 @@ function boardToClient(point) {
   };
 }
 
+function dispatchSyntheticPointer(event) {
+  const originalSetPointerCapture = canvas.setPointerCapture;
+  const originalReleasePointerCapture = canvas.releasePointerCapture;
+  try {
+    canvas.setPointerCapture = () => {};
+    canvas.releasePointerCapture = () => {};
+    canvas.dispatchEvent(event);
+  } finally {
+    if (originalSetPointerCapture) canvas.setPointerCapture = originalSetPointerCapture;
+    else delete canvas.setPointerCapture;
+    if (originalReleasePointerCapture) canvas.releasePointerCapture = originalReleasePointerCapture;
+    else delete canvas.releasePointerCapture;
+  }
+}
+
 function emitPointer(type, point, buttons = 1) {
   if (!canvas || typeof PointerEvent === 'undefined') return;
   const client = boardToClient(point);
-  canvas.dispatchEvent(new PointerEvent(type, {
+  dispatchSyntheticPointer(new PointerEvent(type, {
     bubbles: true,
     cancelable: true,
     pointerId: POINTER_ID,
