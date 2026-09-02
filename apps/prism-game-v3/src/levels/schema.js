@@ -1,6 +1,7 @@
-export const LEVEL_SCHEMA_VERSION = 1;
-export const PIECE_TYPES = ['mirror', 'refractor', 'splitter', 'wall'];
+export const LEVEL_SCHEMA_VERSION = 2;
+export const PIECE_TYPES = ['mirror', 'refractor', 'splitter', 'wall', 'lens', 'reflector'];
 export const GOAL_SHAPES = ['circle', 'rect'];
+export const EMITTER_TYPES = ['emitter', 'lightSource'];
 
 export const LEVEL_JSON_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -21,11 +22,19 @@ export const LEVEL_JSON_SCHEMA = {
     emitters: {
       type: 'array', minItems: 1,
       items: {
-        type: 'object', additionalProperties: false, required: ['id', 'x', 'y', 'angle', 'color'],
+        type: 'object', additionalProperties: false, required: ['id', 'x', 'y', 'color'],
         properties: {
-          id: { type: 'string', minLength: 1 }, x: { type: 'number' }, y: { type: 'number' }, angle: { type: 'number' },
+          id: { type: 'string', minLength: 1 },
+          type: { enum: EMITTER_TYPES },
+          x: { type: 'number' }, y: { type: 'number' },
+          angle: { type: 'number' }, centerDirection: { type: 'number' }, coneAngle: { type: 'number', minimum: 0, maximum: 360 },
+          rayCount: { type: 'integer', minimum: 1, maximum: 1000 }, totalEnergy: { type: 'number', exclusiveMinimum: 0 },
           color: { anyOf: [{ const: 'white' }, { type: 'number', minimum: 400, maximum: 700 }] }
-        }
+        },
+        anyOf: [
+          { required: ['angle'] },
+          { properties: { type: { const: 'lightSource' } }, required: ['type', 'centerDirection', 'coneAngle', 'rayCount', 'totalEnergy'] }
+        ]
       }
     },
     pieces: {
@@ -43,11 +52,13 @@ export const LEVEL_JSON_SCHEMA = {
       type: 'array', minItems: 1,
       items: {
         type: 'object', additionalProperties: false,
-        required: ['id', 'x', 'y', 'shape', 'size', 'requiredColor', 'requiredIntensity'],
+        required: ['id', 'x', 'y', 'shape', 'size'],
         properties: {
           id: { type: 'string', minLength: 1 }, x: { type: 'number' }, y: { type: 'number' }, shape: { enum: GOAL_SHAPES },
-          size: { type: 'number', exclusiveMinimum: 0 }, requiredColor: {}, requiredIntensity: { type: 'number', minimum: 0 }
-        }
+          size: { type: 'number', exclusiveMinimum: 0 }, requiredColor: {}, requiredIntensity: { type: 'number', minimum: 0 },
+          requiredConcentration: { type: 'number', minimum: 0, maximum: 100 }
+        },
+        anyOf: [{ required: ['requiredIntensity'] }, { required: ['requiredConcentration'] }]
       }
     }
   }
@@ -63,6 +74,9 @@ function requiredString(errors, value, path) {
 }
 function requiredNumber(errors, value, path) { if (!finite(value)) add(errors, path, 'must be a finite number'); }
 function requiredBoolean(errors, value, path) { if (typeof value !== 'boolean') add(errors, path, 'must be a boolean'); }
+function optionalUnitInterval(errors, value, path) {
+  if (value != null && (!finite(value) || value < 0 || value > 1)) add(errors, path, 'must be a number from 0 to 1');
+}
 
 function validateLineGeometry(errors, geometry, path) {
   if (!plainObject(geometry)) { add(errors, path, 'must be an object'); return; }
@@ -82,8 +96,18 @@ function validatePolygonGeometry(errors, geometry, path) {
   geometry.vertices.forEach((vertex, index) => { if (!point(vertex)) add(errors, `${path}.vertices[${index}]`, 'must be a point {x,y}'); });
 }
 
+function validateLengthGeometry(errors, geometry, path) {
+  if (!plainObject(geometry)) { add(errors, path, 'must be an object'); return; }
+  if (!finite(geometry.length) || geometry.length <= 0) add(errors, `${path}.length`, 'must be > 0');
+}
+
+function validateReflectorGeometry(errors, geometry, path) {
+  if (!plainObject(geometry)) { add(errors, path, 'must be an object'); return; }
+  if (!finite(geometry.aperture) || geometry.aperture <= 0) add(errors, `${path}.aperture`, 'must be > 0');
+}
+
 function validRequiredColor(value) {
-  if (value === 'any' || value === 'white') return true;
+  if (value == null || value === 'any' || value === 'white') return true;
   if (Array.isArray(value) && value.length === 2 && finite(value[0]) && finite(value[1])) {
     return value[0] >= 400 && value[1] <= 700 && value[0] <= value[1];
   }
@@ -115,7 +139,18 @@ export function validateLevel(level) {
     const path = `$.emitters[${index}]`;
     if (!plainObject(emitter)) { add(errors, path, 'must be an object'); return; }
     requiredString(errors, emitter.id, `${path}.id`);
-    requiredNumber(errors, emitter.x, `${path}.x`); requiredNumber(errors, emitter.y, `${path}.y`); requiredNumber(errors, emitter.angle, `${path}.angle`);
+    requiredNumber(errors, emitter.x, `${path}.x`);
+    requiredNumber(errors, emitter.y, `${path}.y`);
+    if (emitter.type != null && !EMITTER_TYPES.includes(emitter.type)) add(errors, `${path}.type`, `must be one of: ${EMITTER_TYPES.join(', ')}`);
+    const lightSource = emitter.type === 'lightSource';
+    if (lightSource) {
+      requiredNumber(errors, emitter.centerDirection, `${path}.centerDirection`);
+      if (!finite(emitter.coneAngle) || emitter.coneAngle < 0 || emitter.coneAngle > 360) add(errors, `${path}.coneAngle`, 'must be from 0 to 360 degrees');
+      if (!Number.isInteger(emitter.rayCount) || emitter.rayCount < 1 || emitter.rayCount > 1000) add(errors, `${path}.rayCount`, 'must be an integer from 1 to 1000');
+      if (!finite(emitter.totalEnergy) || emitter.totalEnergy <= 0) add(errors, `${path}.totalEnergy`, 'must be > 0');
+    } else {
+      requiredNumber(errors, emitter.angle, `${path}.angle`);
+    }
     if (!(emitter.color === 'white' || (finite(emitter.color) && emitter.color >= 400 && emitter.color <= 700))) {
       add(errors, `${path}.color`, 'must be "white" or a wavelength from 400 to 700 nm');
     }
@@ -127,17 +162,36 @@ export function validateLevel(level) {
     if (!plainObject(pieceValue)) { add(errors, path, 'must be an object'); return; }
     requiredString(errors, pieceValue.id, `${path}.id`);
     if (!PIECE_TYPES.includes(pieceValue.type)) add(errors, `${path}.type`, `must be one of: ${PIECE_TYPES.join(', ')}`);
-    requiredBoolean(errors, pieceValue.movable, `${path}.movable`); requiredBoolean(errors, pieceValue.rotatable, `${path}.rotatable`);
-    requiredNumber(errors, pieceValue.initialX, `${path}.initialX`); requiredNumber(errors, pieceValue.initialY, `${path}.initialY`); requiredNumber(errors, pieceValue.initialRotation, `${path}.initialRotation`);
+    requiredBoolean(errors, pieceValue.movable, `${path}.movable`);
+    requiredBoolean(errors, pieceValue.rotatable, `${path}.rotatable`);
+    requiredNumber(errors, pieceValue.initialX, `${path}.initialX`);
+    requiredNumber(errors, pieceValue.initialY, `${path}.initialY`);
+    requiredNumber(errors, pieceValue.initialRotation, `${path}.initialRotation`);
     if (pieceValue.type === 'mirror' || pieceValue.type === 'splitter') validateLineGeometry(errors, pieceValue.geometry, `${path}.geometry`);
     if (pieceValue.type === 'refractor' || pieceValue.type === 'wall') validatePolygonGeometry(errors, pieceValue.geometry, `${path}.geometry`);
+    if (pieceValue.type === 'lens') validateLengthGeometry(errors, pieceValue.geometry, `${path}.geometry`);
+    if (pieceValue.type === 'reflector') validateReflectorGeometry(errors, pieceValue.geometry, `${path}.geometry`);
     if (!plainObject(pieceValue.props)) add(errors, `${path}.props`, 'must be an object');
+
+    if (pieceValue.type === 'mirror') optionalUnitInterval(errors, pieceValue.props?.reflectivity, `${path}.props.reflectivity`);
     if (pieceValue.type === 'splitter' && (!finite(pieceValue.props?.splitRatio) || pieceValue.props.splitRatio < 0 || pieceValue.props.splitRatio > 1)) {
       add(errors, `${path}.props.splitRatio`, 'must be a number from 0 to 1');
     }
     if (pieceValue.type === 'refractor') {
       if (!finite(pieceValue.props?.refractiveIndexBase) || pieceValue.props.refractiveIndexBase <= 1) add(errors, `${path}.props.refractiveIndexBase`, 'must be > 1');
       if (!finite(pieceValue.props?.dispersionCoefficient) || pieceValue.props.dispersionCoefficient < 0) add(errors, `${path}.props.dispersionCoefficient`, 'must be >= 0');
+      optionalUnitInterval(errors, pieceValue.props?.transmission, `${path}.props.transmission`);
+    }
+    if (pieceValue.type === 'lens') {
+      if (!finite(pieceValue.props?.focalLength) || Math.abs(pieceValue.props.focalLength) < 1e-6) add(errors, `${path}.props.focalLength`, 'must be a non-zero number');
+      optionalUnitInterval(errors, pieceValue.props?.transmission, `${path}.props.transmission`);
+    }
+    if (pieceValue.type === 'reflector') {
+      if (!finite(pieceValue.props?.focalLength) || pieceValue.props.focalLength <= 0) add(errors, `${path}.props.focalLength`, 'must be > 0');
+      if (pieceValue.props?.segmentCount != null && (!Number.isInteger(pieceValue.props.segmentCount) || pieceValue.props.segmentCount < 8 || pieceValue.props.segmentCount > 256)) {
+        add(errors, `${path}.props.segmentCount`, 'must be an integer from 8 to 256');
+      }
+      optionalUnitInterval(errors, pieceValue.props?.reflectivity, `${path}.props.reflectivity`);
     }
   });
 
@@ -145,11 +199,17 @@ export function validateLevel(level) {
   else level.goals.forEach((goal, index) => {
     const path = `$.goals[${index}]`;
     if (!plainObject(goal)) { add(errors, path, 'must be an object'); return; }
-    requiredString(errors, goal.id, `${path}.id`); requiredNumber(errors, goal.x, `${path}.x`); requiredNumber(errors, goal.y, `${path}.y`);
+    requiredString(errors, goal.id, `${path}.id`);
+    requiredNumber(errors, goal.x, `${path}.x`);
+    requiredNumber(errors, goal.y, `${path}.y`);
     if (!GOAL_SHAPES.includes(goal.shape)) add(errors, `${path}.shape`, `must be one of: ${GOAL_SHAPES.join(', ')}`);
     if (!finite(goal.size) || goal.size <= 0) add(errors, `${path}.size`, 'must be > 0');
     if (!validRequiredColor(goal.requiredColor)) add(errors, `${path}.requiredColor`, 'must be any, white, or a visible wavelength range');
-    if (!finite(goal.requiredIntensity) || goal.requiredIntensity < 0) add(errors, `${path}.requiredIntensity`, 'must be >= 0');
+    const hasIntensity = finite(goal.requiredIntensity) && goal.requiredIntensity >= 0;
+    const hasConcentration = finite(goal.requiredConcentration) && goal.requiredConcentration >= 0 && goal.requiredConcentration <= 100;
+    if (!hasIntensity && !hasConcentration) add(errors, path, 'must define requiredIntensity >= 0 or requiredConcentration from 0 to 100');
+    if (goal.requiredIntensity != null && !hasIntensity) add(errors, `${path}.requiredIntensity`, 'must be >= 0');
+    if (goal.requiredConcentration != null && !hasConcentration) add(errors, `${path}.requiredConcentration`, 'must be from 0 to 100');
   });
 
   const ids = [];

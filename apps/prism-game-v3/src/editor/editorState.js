@@ -7,7 +7,7 @@ const degrees = (radians) => radians / DEG;
 export function createBlankLevel({
   id = 'draft-level',
   name = 'Untitled Prism Puzzle',
-  chapter = 'reflection-basics',
+  chapter = 'concentration-basics',
   difficulty = 1,
   width = 1200,
   height = 720
@@ -34,10 +34,19 @@ export function defaultSchemaEntity(type, x, y, level) {
   if (type === 'emitter') {
     return { collection: 'emitters', value: { id: nextEntityId(level, 'E'), x, y, angle: 0, color: 650 } };
   }
+  if (type === 'lightSource') {
+    return {
+      collection: 'emitters',
+      value: {
+        id: nextEntityId(level, 'LGT'), type: 'lightSource', x, y,
+        centerDirection: 0, coneAngle: 60, rayCount: 150, totalEnergy: 1, color: 589
+      }
+    };
+  }
   if (type === 'goal') {
     return {
       collection: 'goals',
-      value: { id: nextEntityId(level, 'G'), x, y, shape: 'circle', size: 38, requiredColor: 'any', requiredIntensity: 0.2 }
+      value: { id: nextEntityId(level, 'G'), x, y, shape: 'circle', size: 30, requiredColor: 'any', requiredConcentration: 95 }
     };
   }
   if (type === 'mirror') {
@@ -46,7 +55,7 @@ export function defaultSchemaEntity(type, x, y, level) {
       value: {
         id: nextEntityId(level, 'M'), type: 'mirror', movable: true, rotatable: true,
         geometry: { a: { x: -75, y: 0 }, b: { x: 75, y: 0 } },
-        initialX: x, initialY: y, initialRotation: 0, props: {}
+        initialX: x, initialY: y, initialRotation: 0, props: { reflectivity: 1 }
       }
     };
   }
@@ -67,7 +76,27 @@ export function defaultSchemaEntity(type, x, y, level) {
         id: nextEntityId(level, 'P'), type: 'refractor', movable: true, rotatable: true,
         geometry: { vertices: [{ x: -65, y: -95 }, { x: -65, y: 95 }, { x: 90, y: 0 }] },
         initialX: x, initialY: y, initialRotation: 0,
-        props: { refractiveIndexBase: 1.52, dispersionCoefficient: 4200 }
+        props: { refractiveIndexBase: 1.52, dispersionCoefficient: 4200, transmission: 1 }
+      }
+    };
+  }
+  if (type === 'lens') {
+    return {
+      collection: 'pieces',
+      value: {
+        id: nextEntityId(level, 'L'), type: 'lens', movable: true, rotatable: true,
+        geometry: { length: 300 }, initialX: x, initialY: y, initialRotation: 0,
+        props: { focalLength: 180, transmission: 1 }
+      }
+    };
+  }
+  if (type === 'reflector') {
+    return {
+      collection: 'pieces',
+      value: {
+        id: nextEntityId(level, 'R'), type: 'reflector', movable: true, rotatable: true,
+        geometry: { aperture: 300 }, initialX: x, initialY: y, initialRotation: 0,
+        props: { focalLength: 120, segmentCount: 72, reflectivity: 1 }
       }
     };
   }
@@ -108,44 +137,72 @@ export function serializeRuntimeLevel(runtime, metadata = runtime.metadata) {
     chapter: metadata.chapter,
     difficulty: Number(metadata.difficulty),
     boardBounds: clone(runtime.boardBounds),
-    emitters: runtime.emitters.map((emitter) => ({
+    emitters: runtime.emitters.map((emitter) => emitter.type === 'lightSource' ? {
+      id: emitter.id,
+      type: 'lightSource',
+      x: Number(emitter.x.toFixed(4)),
+      y: Number(emitter.y.toFixed(4)),
+      centerDirection: Number(degrees(emitter.centerDirection ?? 0).toFixed(4)),
+      coneAngle: Number(degrees(emitter.coneAngle ?? 0).toFixed(4)),
+      rayCount: emitter.rayCount,
+      totalEnergy: emitter.totalEnergy,
+      color: emitter.wavelength == null ? 'white' : emitter.wavelength
+    } : {
       id: emitter.id,
       x: Number(emitter.x.toFixed(4)),
       y: Number(emitter.y.toFixed(4)),
       angle: Number(degrees(emitter.angle ?? 0).toFixed(4)),
       color: emitter.wavelength == null ? 'white' : emitter.wavelength
-    })),
+    }),
     pieces: runtime.pieces.map((piece) => {
       const rotation = piece.type === 'mirror' || piece.type === 'splitter'
         ? (piece.rotation ?? 0) - (piece.baseGeometryAngle ?? 0)
         : (piece.rotation ?? 0);
       const props = {};
+      let geometry = clone(piece.schemaGeometry ?? {});
+      if (piece.type === 'mirror') props.reflectivity = piece.reflectivity ?? 1;
       if (piece.type === 'splitter') props.splitRatio = piece.splitRatio;
       if (piece.type === 'refractor') {
         props.refractiveIndexBase = piece.refractiveIndexBase;
         props.dispersionCoefficient = piece.dispersionCoefficient;
+        props.transmission = piece.transmission ?? 1;
+      }
+      if (piece.type === 'lens') {
+        geometry = { length: piece.length };
+        props.focalLength = piece.focalLength;
+        props.transmission = piece.transmission ?? 1;
+      }
+      if (piece.type === 'reflector') {
+        geometry = { aperture: piece.aperture };
+        props.focalLength = piece.focalLength;
+        props.segmentCount = piece.segmentCount;
+        props.reflectivity = piece.reflectivity ?? 1;
       }
       return {
         id: piece.id,
         type: piece.type,
         movable: piece.schemaMovable ?? piece.movable,
         rotatable: piece.schemaRotatable ?? piece.rotatable,
-        geometry: clone(piece.schemaGeometry ?? (piece.vertices ? { vertices: piece.vertices } : {})),
+        geometry,
         initialX: Number(piece.x.toFixed(4)),
         initialY: Number(piece.y.toFixed(4)),
         initialRotation: Number(degrees(rotation).toFixed(4)),
         props
       };
     }),
-    goals: runtime.goals.map((goal) => ({
-      id: goal.id,
-      x: Number(goal.x.toFixed(4)),
-      y: Number(goal.y.toFixed(4)),
-      shape: goal.shape,
-      size: goal.shape === 'rect' ? goal.width : goal.radius,
-      requiredColor: clone(goal.requiredColor),
-      requiredIntensity: goal.requiredIntensity
-    }))
+    goals: runtime.goals.map((goal) => {
+      const result = {
+        id: goal.id,
+        x: Number(goal.x.toFixed(4)),
+        y: Number(goal.y.toFixed(4)),
+        shape: goal.shape,
+        size: goal.shape === 'rect' ? goal.width : goal.radius,
+        requiredColor: clone(goal.requiredColor ?? 'any')
+      };
+      if (Number.isFinite(goal.requiredConcentration)) result.requiredConcentration = goal.requiredConcentration;
+      else result.requiredIntensity = goal.requiredIntensity;
+      return result;
+    })
   };
   assertValidLevel(level);
   return level;

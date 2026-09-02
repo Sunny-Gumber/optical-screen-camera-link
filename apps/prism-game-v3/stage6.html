@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta name="theme-color" content="#06111d" />
+    <title>Prism Lab V3 — Stage 6 Concentration Lab</title>
+  </head>
+  <body>
+    <main class="s6-shell">
+      <header class="s6-hero">
+        <div>
+          <p class="s6-eyebrow">PRISM LAB V3 · STAGE 6</p>
+          <h1>Diffuse Light & Concentration</h1>
+          <p>One normalized energy budget, many sampled rays. Place the parabolic reflector at the source focus, collimate the bundle, then focus it with the thin lens until the receiver captures at least 95%.</p>
+        </div>
+        <a class="s6-link" href="./index.html">Open level editor</a>
+      </header>
+
+      <section class="s6-summary">
+        <div id="solvedIndicator" class="s6-solved">NOT SOLVED</div>
+        <div class="s6-meter-card">
+          <div class="s6-meter-head"><span>Goal concentration</span><strong id="concentrationValue">0.00%</strong></div>
+          <div class="s6-meter"><div id="concentrationBar"></div><i style="left:95%"></i></div>
+          <div class="s6-threshold"><span>0%</span><span>95% threshold</span><span>100%</span></div>
+        </div>
+      </section>
+
+      <section class="s6-metrics">
+        <div><span>Physics</span><strong id="physicsCost">0 ms</strong></div>
+        <div><span>Frame</span><strong id="frameCost">0 ms</strong></div>
+        <div><span>Rays</span><strong id="rayCountReadout">150</strong></div>
+        <div><span>Segments</span><strong id="segmentCount">0</strong></div>
+      </section>
+
+      <section class="s6-workspace">
+        <div class="s6-canvas-card">
+          <canvas id="stage6Canvas" width="1200" height="720" aria-label="Diffuse-light concentration physics test"></canvas>
+          <div class="s6-badges"><span>additive ray rendering</span><span>50 rays while dragging</span><span>150+ at rest</span></div>
+          <div class="s6-hint">Drag the reflector or lens · tap/click a piece and use its round handle to rotate</div>
+        </div>
+
+        <aside class="s6-panel">
+          <section>
+            <h2>QA presets</h2>
+            <div class="s6-button-grid">
+              <button data-preset="perfect" class="active">Full 95%+ solve</button>
+              <button data-preset="bare">Bare source</button>
+              <button data-preset="reflector">Reflector only</button>
+              <button data-preset="misaligned">Misaligned reflector</button>
+              <button data-preset="wall">Absorption wall</button>
+            </div>
+          </section>
+
+          <section>
+            <h2>Sampling</h2>
+            <label>Full ray count <strong id="fullRayCountLabel">150</strong><input id="fullRayCount" type="range" min="50" max="220" step="10" value="150" /></label>
+            <label>Source cone <strong id="coneAngleLabel">110°</strong><input id="coneAngle" type="range" min="30" max="130" step="1" value="110" /></label>
+            <label class="s6-check"><input id="smoothRays" type="checkbox" checked /> 110 ms visual smoothing</label>
+            <label class="s6-check"><input id="showPhysics" type="checkbox" checked /> Show focus/axis diagnostics</label>
+          </section>
+
+          <section>
+            <h2>Interaction state</h2>
+            <dl class="s6-state">
+              <dt>Selected</dt><dd id="selectedPiece">None</dd>
+              <dt>Mode</dt><dd id="interactionMode">Idle</dd>
+              <dt>Sampling</dt><dd id="samplingMode">Full</dd>
+              <dt>Placement</dt><dd id="placementState">Valid</dd>
+            </dl>
+          </section>
+
+          <section>
+            <div class="s6-title-row"><h2>Energy accounting</h2><button id="logEnergy" class="mini">Log snapshot</button></div>
+            <dl class="s6-state energy">
+              <dt>Emitted</dt><dd id="emittedEnergy">100.00%</dd>
+              <dt>Goal landed</dt><dd id="landedEnergy">0.00%</dd>
+              <dt>Absorbed</dt><dd id="absorbedEnergy">0.00%</dd>
+              <dt>Escaped</dt><dd id="escapedEnergy">0.00%</dd>
+              <dt>Optic loss</dt><dd id="opticLossEnergy">0.00%</dd>
+              <dt>Accounting error</dt><dd id="accountingError">0.0000%</dd>
+            </dl>
+          </section>
+
+          <section class="s6-explain">
+            <h2>What should happen</h2>
+            <p><b>Reflector:</b> source at the parabola focus → outgoing rays become parallel.</p>
+            <p><b>Lens:</b> parallel bundle → converges at the configured focal plane.</p>
+            <p><b>Goal:</b> concentration = landed energy ÷ total emitted energy × 100.</p>
+          </section>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="/src/stage6.js"></script>
+  </body>
+</html>
