@@ -1,7 +1,6 @@
 export const SAVE_VERSION = 1;
 export const STORAGE_KEY = 'prismlab_save_v1';
 
-const clone = (value) => JSON.parse(JSON.stringify(value));
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 
 export function normalizeManifest(manifest) {
@@ -47,7 +46,13 @@ export function normalizeManifest(manifest) {
 
 export function flattenManifest(manifest) {
   return normalizeManifest(manifest).chapters.flatMap((chapter, chapterIndex) =>
-    chapter.levels.map((level, levelIndex) => ({ ...level, chapterId: chapter.id, chapterName: chapter.name, chapterIndex, levelIndex }))
+    chapter.levels.map((level, levelIndex) => ({
+      ...level,
+      chapterId: chapter.id,
+      chapterName: chapter.name,
+      chapterIndex,
+      levelIndex
+    }))
   );
 }
 
@@ -66,23 +71,33 @@ export function createDefaultSave(manifest = null) {
 function sanitizeSave(value, manifest = null) {
   const fallback = createDefaultSave(manifest);
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
+
   const completedLevels = Array.isArray(value.completedLevels)
     ? [...new Set(value.completedLevels.filter((id) => typeof id === 'string' && id))]
     : [];
+
   const starsPerLevel = {};
   for (const [id, stars] of Object.entries(value.starsPerLevel ?? {})) {
-    if (typeof id === 'string' && Number.isInteger(stars)) starsPerLevel[id] = Math.max(0, Math.min(3, stars));
+    if (typeof id === 'string' && Number.isInteger(stars)) {
+      starsPerLevel[id] = Math.max(0, Math.min(3, stars));
+    }
   }
+
   const bestConcentrationPerLevel = {};
   for (const [id, concentration] of Object.entries(value.bestConcentrationPerLevel ?? {})) {
-    if (typeof id === 'string' && finite(concentration)) bestConcentrationPerLevel[id] = Math.max(0, Math.min(100, concentration));
+    if (typeof id === 'string' && finite(concentration)) {
+      bestConcentrationPerLevel[id] = Math.max(0, Math.min(100, concentration));
+    }
   }
+
   return {
     version: SAVE_VERSION,
     completedLevels,
     starsPerLevel,
     bestConcentrationPerLevel,
-    currentLevel: typeof value.currentLevel === 'string' && value.currentLevel ? value.currentLevel : fallback.currentLevel,
+    currentLevel: typeof value.currentLevel === 'string' && value.currentLevel
+      ? value.currentLevel
+      : fallback.currentLevel,
     lastPlayed: typeof value.lastPlayed === 'string' ? value.lastPlayed : null
   };
 }
@@ -94,9 +109,7 @@ export function migrateSave(input, manifest = null) {
     catch { return createDefaultSave(manifest); }
   }
   if (!value || typeof value !== 'object') return createDefaultSave(manifest);
-  if (value.version == null || value.version === 0) {
-    value = { ...value, version: SAVE_VERSION };
-  }
+  if (value.version == null || value.version === 0) value = { ...value, version: SAVE_VERSION };
   if (value.version !== SAVE_VERSION) return createDefaultSave(manifest);
   return sanitizeSave(value, manifest);
 }
@@ -125,6 +138,7 @@ export function levelUnlocked(levelId, manifest, save) {
   const normalized = normalizeManifest(manifest);
   const flat = flattenManifest(normalized);
   if (flat[0]?.id === levelId) return true;
+
   for (let chapterIndex = 0; chapterIndex < normalized.chapters.length; chapterIndex += 1) {
     const chapter = normalized.chapters[chapterIndex];
     const levelIndex = chapter.levels.findIndex((level) => level.id === levelId);
@@ -161,30 +175,48 @@ function memoryStorage() {
 
 export function createProgressStore({
   manifest,
-  storage = globalThis?.localStorage,
+  storage,
   now = () => new Date().toISOString(),
   onWarning = () => {}
 } = {}) {
   const fallbackStorage = memoryStorage();
   let activeStorage = storage;
   let persistent = true;
+  let warningSent = false;
 
   const warnFallback = () => {
-    if (!persistent) return;
+    if (!warningSent) {
+      warningSent = true;
+      onWarning('Persistent storage is unavailable. Progress will last only for this tab/session.');
+    }
     persistent = false;
     activeStorage = fallbackStorage;
-    onWarning('Persistent storage is unavailable. Progress will last only for this tab/session.');
   };
 
+  // Accessing window.localStorage itself can throw a SecurityError in restricted
+  // browsing contexts. Resolve it inside the guarded function body rather than
+  // in a default parameter, so the in-memory fallback can still take over.
+  if (activeStorage === undefined) {
+    try { activeStorage = globalThis?.localStorage ?? null; }
+    catch { activeStorage = null; }
+  }
+  if (!activeStorage) warnFallback();
+
   function readRaw() {
-    try { return activeStorage?.getItem(STORAGE_KEY) ?? null; }
-    catch { warnFallback(); return activeStorage.getItem(STORAGE_KEY); }
+    try { return activeStorage.getItem(STORAGE_KEY) ?? null; }
+    catch {
+      warnFallback();
+      return activeStorage.getItem(STORAGE_KEY);
+    }
   }
 
   function write(save) {
     const serialized = JSON.stringify(save);
-    try { activeStorage?.setItem(STORAGE_KEY, serialized); }
-    catch { warnFallback(); activeStorage.setItem(STORAGE_KEY, serialized); }
+    try { activeStorage.setItem(STORAGE_KEY, serialized); }
+    catch {
+      warnFallback();
+      activeStorage.setItem(STORAGE_KEY, serialized);
+    }
     return save;
   }
 
@@ -195,7 +227,9 @@ export function createProgressStore({
       try {
         const parsed = JSON.parse(raw);
         if (JSON.stringify(sanitizeSave(parsed, manifest)) !== JSON.stringify(save)) write(save);
-      } catch { write(save); }
+      } catch {
+        write(save);
+      }
     }
     return save;
   }
@@ -206,7 +240,10 @@ export function createProgressStore({
     const stars = calculateStars(concentration, Number(result.movesUsed) || 0, thresholds);
     if (!save.completedLevels.includes(levelId) && stars > 0) save.completedLevels.push(levelId);
     save.starsPerLevel[levelId] = Math.max(save.starsPerLevel[levelId] ?? 0, stars);
-    save.bestConcentrationPerLevel[levelId] = Math.max(save.bestConcentrationPerLevel[levelId] ?? 0, concentration);
+    save.bestConcentrationPerLevel[levelId] = Math.max(
+      save.bestConcentrationPerLevel[levelId] ?? 0,
+      concentration
+    );
     const next = nextLevelId(levelId, manifest);
     save.currentLevel = next && levelUnlocked(next, manifest, save) ? next : levelId;
     save.lastPlayed = now();
@@ -222,8 +259,11 @@ export function createProgressStore({
 
   function resetAllProgress() {
     const clean = createDefaultSave(manifest);
-    try { activeStorage?.removeItem(STORAGE_KEY); }
-    catch { warnFallback(); activeStorage.removeItem(STORAGE_KEY); }
+    try { activeStorage.removeItem(STORAGE_KEY); }
+    catch {
+      warnFallback();
+      activeStorage.removeItem(STORAGE_KEY);
+    }
     return write(clean);
   }
 
