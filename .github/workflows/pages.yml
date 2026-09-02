@@ -27,7 +27,7 @@ jobs:
       - name: Test and build Prism V3
         working-directory: apps/prism-game-v3
         run: |
-          npm ci
+          npm install
           npm test
           npm run build
 
@@ -45,7 +45,7 @@ jobs:
       - name: Build Prism V3 production bundle
         working-directory: apps/prism-game-v3
         run: |
-          npm ci
+          npm install
           npm run build
       - name: Publish Prism V3 at stable Pages paths
         run: |
